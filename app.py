@@ -21,58 +21,68 @@ def hent_firma_data(orgnr):
 
 def finn_nyheter(firmanavn):
     try:
-        resultater = DDGS().text(f"{firmanavn} norge nyheter", max_results=3)
+        # Søker bredere for å finne faktiske problemer eller mål
+        resultater = DDGS().text(f"{firmanavn} norge strategi utfordringer regnskap", max_results=5)
         return "\n".join([r['body'] for r in resultater]) if resultater else ""
     except:
         return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
-    prompt = f"Lag en profesjonell isbryter på 2 setninger for {firmanavn} i bransjen {bransje} basert på: {nyhetstekst}. Foreslå kontaktperson uten å gjette navn."
+    prompt = f"""
+    Du er en sylskarp salgsstrateg for Compend. 
+    Selskap: {firmanavn}
+    Bransje: {bransje}
+    Innsikt: {nyhetstekst}
+    
+    OPPGAVE:
+    Skriv en isbryter til selgeren vår. 
+    1. ALDRI start med "Velkommen til" eller "Hei". 
+    2. Ikke snakk som en reklamebrosjyre. 
+    3. Finn en konkret vinkel: Hvis nyhetene nevner vekst, snakk om behovet for rask opplæring. Hvis bransjen er kompleks, snakk om sertifisering og kontroll.
+    4. Foreslå en tittel på hvem man skal be om å få snakke med (f.eks. Operasjonell leder eller HR).
+    5. Maks 3 korte setninger.
+    """
     try:
-        svar = klient.chat.completions.create(model=modell_navn, messages=[{"role": "user", "content": prompt}])
+        svar = klient.chat.completions.create(
+            model=modell_navn, 
+            messages=[{"role": "system", "content": "Du hater floskler og elsker konkret salgsstrategi."}, {"role": "user", "content": prompt}]
+        )
         return svar.choices[0].message.content
     except:
         return "Kunne ikke generere analyse."
-
-def finn_eposter(domene):
-    if not domene: return []
-    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-    try:
-        res = requests.get("https://api.hunter.io/v2/domain-search", params={"domain": rent_domene, "api_key": st.secrets["HUNTER_API_KEY"], "limit": 3})
-        return [e["value"] for e in res.json().get("data", {}).get("emails", [])] if res.status_code == 200 else []
-    except: return []
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Compend Lead-Maskin", layout="wide")
 st.title("📊 Compend AI: Markedsanalyse")
 
+# Session State
 if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
+if "side_nummer" not in st.session_state: st.session_state.side_nummer = 0
 
 def utfor_analyse(orgnr):
+    st.session_state.side_nummer = 0
     hoved = hent_firma_data(orgnr)
     if hoved:
         st.session_state.hoved_firma = hoved
         st.session_state.forrige_sok = orgnr
         nyheter = finn_nyheter(hoved['navn'])
         st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent'))
-        st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
-            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 50}).json()
+            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
             alle = res.get("_embedded", {}).get("enheter", [])
-            st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != orgnr][:10]
+            st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != orgnr][:15]
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
-# Inndatafelt
+# Inndata og automatisk scroll-trigger via rerun
 org_input = st.text_input("Organisasjonsnummer:", value=st.session_state.soke_felt)
 
-# Vaktpost: Hvis feltet endrer seg (f.eks. via Analyser-knapp), kjør analyse automatisk
-if org_input != st.session_state.forrige_sok and len(org_input) == 9:
+if (org_input != st.session_state.forrige_sok and len(org_input) == 9):
     utfor_analyse(org_input)
     st.rerun()
 
@@ -91,21 +101,16 @@ if st.session_state.hoved_firma:
         st.write(f"**Ansatte:** {f.get('antallAnsatte')}")
     with col2:
         if st.button("🚀 Send til HubSpot", type="primary"):
-            full_adresse = f"{f.get('forretningsadresse', {}).get('adresse', [''])[0]}, {f.get('forretningsadresse', {}).get('postnummer', '')} {f.get('forretningsadresse', {}).get('poststed', '')}"
             data_pakke = {
                 "firma": f['navn'],
-                "organisasjonsnummer": f['organisasjonsnummer'],
                 "isbryter": st.session_state.get('isbryter'),
-                "eposter": ", ".join(st.session_state.get('eposter', [])),
                 "bransje": f.get('naeringskode1', {}).get('beskrivelse'),
-                "ansatte": f.get('antallAnsatte'),
-                "adresse": full_adresse,
-                "nettside": f.get('hjemmeside')
+                "ansatte": f.get('antallAnsatte')
             }
             requests.post(zapier_mottaker, json=data_pakke)
             st.success("Sendt!")
 
-    st.info(st.session_state.get('isbryter'))
+    st.warning(f"**Strategisk tips:**\n{st.session_state.get('isbryter')}")
     
     if st.session_state.mine_leads:
         st.markdown("---")
@@ -113,7 +118,14 @@ if st.session_state.hoved_firma:
         for i, lead in enumerate(st.session_state.mine_leads):
             c1, c2 = st.columns([4, 1])
             c1.write(f"**{lead['navn']}** ({lead.get('antallAnsatte')} ansatte)")
-            # Denne knappen endrer soke_felt, som fanges opp av vaktposten øverst
-            if c2.button("Analyser", key=f"an_{lead['organisasjonsnummer']}"):
+            if c2.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                 st.session_state.soke_felt = lead['organisasjonsnummer']
                 st.rerun()
+
+        if st.button("Last inn flere..."):
+            st.session_state.side_nummer += 1
+            kode = f.get("naeringskode1", {}).get("kode")
+            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100, "page": st.session_state.side_nummer}).json()
+            nye = [e for e in res.get("_embedded", {}).get("enheter", []) if e.get('antallAnsatte', 0) >= 10]
+            st.session_state.mine_leads.extend(nye[:15])
+            st.rerun()
