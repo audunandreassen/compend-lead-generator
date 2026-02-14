@@ -40,7 +40,6 @@ def finn_eposter(domene):
     except:
         return []
 
-# Funksjon for å konvertere dataframe til Excel-format i minnet
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -51,20 +50,24 @@ def to_excel(df):
 st.set_page_config(page_title="Compend AI Market Insights", layout="wide")
 st.title("📊 Compend AI: Markedsanalyse & Leads")
 
+# Initialiser session state
 if "side_nummer" not in st.session_state: st.session_state.side_nummer = 0
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
+if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
 
+# Søkefelt
 col_l, col_m, col_r = st.columns([1, 2, 1])
 with col_m:
     org_input = st.text_input("Skriv inn org.nummer for dyp analyse:", value=st.session_state.soke_felt)
     start_knapp = st.button("Start Markedsanalyse", use_container_width=True)
 
-if start_knapp:
+# FUNKSJON FOR SØK (brukes av både knappen og "Analyser"-knappene)
+def utfor_sok(orgnr):
     st.session_state.side_nummer = 0
-    hoved_firma = hent_firma_data(org_input)
-    
+    hoved_firma = hent_firma_data(orgnr)
     if hoved_firma:
         st.session_state.hoved_firma = hoved_firma
+        st.session_state.forrige_sok = orgnr
         kode = hoved_firma.get("naeringskode1", {}).get("kode")
         if kode:
             params = {"naeringskode": kode, "size": 15, "page": 0, "fraAntallAnsatte": 10}
@@ -73,7 +76,15 @@ if start_knapp:
     else:
         st.error("Fant ikke selskapet.")
 
-# --- HOVEDVISNING ---
+# Sjekk om vi skal trigge et nytt søk automatisk (når Analyser-knappen er trykket)
+if org_input != st.session_state.forrige_sok and len(org_input) == 9:
+    utfor_sok(org_input)
+    st.rerun()
+
+if start_knapp:
+    utfor_sok(org_input)
+
+# --- VISNING ---
 if "hoved_firma" in st.session_state:
     f = st.session_state.hoved_firma
     st.markdown(f"## 🎯 Hovedfokus: {f['navn']}")
@@ -84,17 +95,15 @@ if "hoved_firma" in st.session_state:
         st.write(f"**Org.nr:** {f['organisasjonsnummer']}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse')}")
         st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
-        
     with col2:
         st.subheader("Lokasjon & Web")
         adr = f.get("forretningsadresse", {})
         st.write(f"**Adresse:** {adr.get('adresse', [''])[0]}, {adr.get('postnummer', '')} {adr.get('poststed', '')}")
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke registrert')}")
-
     with col3:
         st.subheader("Handling")
         if st.button("🚀 Send til HubSpot", use_container_width=True, type="primary"):
-            st.toast("Sender data...")
+            st.toast("Sender...")
 
     with st.expander("✨ Se AI-generert salgsstrategi", expanded=True):
         with st.spinner("Analyserer..."):
@@ -104,10 +113,8 @@ if "hoved_firma" in st.session_state:
         st.markdown(f"**Foreslått åpning:** {replikk}")
         if eposter: st.write(f"**E-poster:** {', '.join(eposter)}")
     
-    # --- SAMMENLIGNINGSTABELL ---
     if "mine_leads" in st.session_state:
         st.markdown("### 📈 Markedssammenligning")
-        
         sammenligning_data = [{"Selskap": f['navn'] + " (Hoved)", "Ansatte": f.get('antallAnsatte', 0), "Kommune": f.get('forretningsadresse', {}).get('kommune', 'Ukjent'), "Status": "Hovedfokus"}]
         for l in st.session_state.mine_leads[:5]:
             if l['organisasjonsnummer'] != f['organisasjonsnummer']:
@@ -115,31 +122,31 @@ if "hoved_firma" in st.session_state:
         
         df = pd.DataFrame(sammenligning_data)
         st.table(df)
-
-        # EKSPORT-KNAPP
-        excel_data = to_excel(df)
-        st.download_button(
-            label="📥 Last ned analyse som Excel",
-            data=excel_data,
-            file_name=f"analyse_{f['navn'].replace(' ', '_')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-
+        st.download_button("📥 Last ned analyse som Excel", data=to_excel(df), file_name=f"analyse_{f['navn']}.xlsx", use_container_width=True)
         st.bar_chart(df.set_index("Selskap")["Ansatte"])
 
-    # --- LISTE OVER MULIGHETER ---
-    st.markdown("### 💡 Andre relevante muligheter")
-    for lead in st.session_state.mine_leads:
-        if lead['organisasjonsnummer'] == f['organisasjonsnummer']: continue
-        with st.container():
-            c1, c2, c3 = st.columns([3, 1, 1])
-            with c1:
-                st.write(f"**{lead['navn']}** ({lead.get('antallAnsatte', 0)} ansatte)")
-            with c2:
-                if st.button("🔍 Analyser", key=f"s_{lead['organisasjonsnummer']}"):
-                    st.session_state.soke_felt = lead['organisasjonsnummer']
-                    st.rerun()
-            with c3:
-                if st.button("➕ Send", key=f"z_{lead['organisasjonsnummer']}"):
-                    st.toast("Sendt!")
+        st.markdown("### 💡 Andre relevante muligheter")
+        for lead in st.session_state.mine_leads:
+            if lead['organisasjonsnummer'] == f['organisasjonsnummer']: continue
+            with st.container():
+                c1, c2, c3 = st.columns([3, 1, 1])
+                with c1:
+                    st.write(f"**{lead['navn']}** ({lead.get('antallAnsatte', 0)} ansatte)")
+                with c2:
+                    if st.button("🔍 Analyser", key=f"s_{lead['organisasjonsnummer']}"):
+                        st.session_state.soke_felt = lead['organisasjonsnummer']
+                        st.rerun()
+                with c3:
+                    if st.button("➕ Send", key=f"z_{lead['organisasjonsnummer']}"):
+                        st.toast("Sendt!")
+                st.divider()
+
+        # Last inn flere selskaper (Paginering)
+        if st.button("Last inn 15 flere selskaper...", use_container_width=True):
+            st.session_state.side_nummer += 1
+            kode = st.session_state.hoved_firma.get("naeringskode1", {}).get("kode")
+            params = {"naeringskode": kode, "size": 15, "page": st.session_state.side_nummer, "fraAntallAnsatte": 10}
+            res = requests.get(brreg_adresse, params=params).json()
+            nye_leads = res.get("_embedded", {}).get("enheter", [])
+            st.session_state.mine_leads.extend(nye_leads)
+            st.rerun()
