@@ -9,17 +9,13 @@ zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 modell_navn = "gpt" + chr(45) + "4o" + chr(45) + "mini"
 
-# Ny funksjon for å finne epostadresser via Hunter
 def finn_eposter(domene):
     if not domene:
         return []
         
-    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "")
-    
-    # Vi bruker chr for å bygge lenken til databasen
+    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
     hunter_url = "https://api.hunter.io/v2/domain" + chr(45) + "search"
     
-    # Sjekker om nøkkelen finnes i bankboksen
     if "HUNTER_API_KEY" in st.secrets:
         hunter_nokkel = st.secrets["HUNTER_API_KEY"]
         parametere = {"domain": rent_domene, "api_key": hunter_nokkel, "limit": 3}
@@ -28,12 +24,14 @@ def finn_eposter(domene):
             hunter_svar = requests.get(hunter_url, params=parametere)
             if hunter_svar.status_code == 200:
                 data = hunter_svar.json()
-                eposter = [epost["value"] for epost in data["data"]["emails"]]
+                eposter = [epost["value"] for epost in data.get("data", {}).get("emails", [])]
                 return eposter
-        except Exception:
-            pass
+            else:
+                return [f"Feilkode fra Hunter: {hunter_svar.status_code}"]
+        except Exception as feilmelding:
+            return [f"Klarte ikke koble til: {feilmelding}"]
             
-    return []
+    return ["Mangler Hunter passord i bankboksen."]
 
 def finn_nyheter(firmanavn):
     try:
@@ -112,11 +110,11 @@ if len(st.session_state.mine_leads) > 0:
                 funnede_eposter = finn_eposter(nettside)
             
             if funnede_eposter:
-                st.write("Fant følgende epostadresser:")
+                st.write("Resultat fra Hunter:")
                 for epost in funnede_eposter:
                     st.write(f"* {epost}")
             else:
-                st.write("Fant ingen epostadresser automatisk.")
+                st.write("Hunter fant ingen eposter automatisk.")
             
             st.info(f"Forslag til selger: {replikk}")
             
