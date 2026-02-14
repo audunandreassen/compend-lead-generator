@@ -6,12 +6,11 @@ import openai
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 
-# Her legger du inn din egen hemmelige nøkkel fra OpenAI
-openai.api_key = "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"
+# Her henter vi nøkkelen trygt fra Streamlit sin bankboks!
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 def finn_nyheter(firmanavn):
     try:
-        # Speideren vår søker på nettet
         resultater = DDGS().text(f"{firmanavn} norge nyheter", max_results=2)
         if resultater:
             innhold = resultater[0]["body"]
@@ -75,7 +74,6 @@ if len(st.session_state.mine_leads) > 0:
             st.subheader(nytt_firma)
             st.write(f"Organisasjonsnummer: {nytt_orgnr}")
             
-            # Vi forteller brukeren at maskinen jobber siden dette tar et par sekunder
             with st.spinner("Leter etter nyheter og skriver replikk..."):
                 nyheter = finn_nyheter(nytt_firma)
                 replikk = lag_ekte_isbryter(nytt_firma, nyheter)
