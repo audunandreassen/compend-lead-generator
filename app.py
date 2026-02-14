@@ -3,7 +3,7 @@ import requests
 
 # Nettadressene vi trenger
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
-zapier_mottaker = "DIN_ZAPIER_ADRESSE_HER"
+zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 
 # En liten hjelpemotor som later som den er kunstig intelligens for prototypen
 def lag_isbryter(firmanavn):
