@@ -6,10 +6,9 @@ from openai import OpenAI
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 
-# Vi oppdaterer oppkoblingen til nyeste metode
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Vi bygger modellnavnet slik for å unngå spesialtegn i koden
+# Vi bygger modellnavnet slik for å unngå spesialtegn
 modell_navn = "gpt" + chr(45) + "4o" + chr(45) + "mini"
 
 def finn_nyheter(firmanavn):
@@ -26,7 +25,7 @@ def finn_nyheter(firmanavn):
         return "Ingen ferske nyheter."
 
 def lag_ekte_isbryter(firmanavn, nyhetstekst, bransje):
-    instruks = f"Du er en dyktig og hyggelig selger for Compend. Compend selger en plattform for kurs og opplæring. Selskapet {firmanavn} opererer i denne bransjen: '{bransje}'. Nyheter om selskapet: '{nyhetstekst}'. Din oppgave: Skriv en kort åpningsreplikk på maksimalt to setninger for en telefonsamtale. Finn en naturlig vinkel for å selge inn et læringssystem. Hvis nyhetene er tomme, lag replikken utelukkende basert på opplæringsbehov, sertifiseringer eller utfordringer som er helt typiske for bransjen '{bransje}'."
+    instruks = f"Du er en dyktig og hyggelig selger for Compend. Compend selger en plattform for kurs og opplæring. Selskapet {firmanavn} opererer i denne bransjen: '{bransje}'. Nyheter om selskapet: '{nyhetstekst}'. Din oppgave: Skriv en kort åpningsreplikk på maksimalt to setninger for en telefonsamtale. Finn en naturlig vinkel for å selge inn et læringssystem. Legg deretter til en tredje og siste setning der du foreslår nøyaktig hvilken rolle selgeren bør be om å få snakke med hos kunden."
     
     try:
         svar = klient.chat.completions.create(
@@ -35,7 +34,6 @@ def lag_ekte_isbryter(firmanavn, nyhetstekst, bransje):
         )
         return svar.choices[0].message.content
     except Exception as feilmelding:
-        # Her fanger vi den faktiske feilen og viser den til deg!
         return f"Systemfeil fra maskinen: {feilmelding}"
 
 st.title("Compend Lead Generator")
@@ -73,10 +71,20 @@ if len(st.session_state.mine_leads) > 0:
         
         bransje_navn = treff.get("naeringskode1", {}).get("beskrivelse", "Ukjent bransje")
         
+        # Her henter vi ut nettsiden fra den offentlige informasjonen
+        nettside = treff.get("hjemmeside", "")
+        
         with st.container():
             st.subheader(nytt_firma)
             st.write(f"Organisasjonsnummer: {nytt_orgnr}")
             st.write(f"Bransje: {bransje_navn}")
+            
+            # Hvis selskapet har en registrert nettside viser vi en klikkbar lenke
+            if nettside:
+                # Vi legger til riktig protokoll hvis den mangler
+                if not nettside.startswith("http"):
+                    nettside = "https://" + nettside
+                st.markdown(f"[Klikk her for å besøke nettsiden til {nytt_firma}]({nettside})")
             
             with st.spinner("Leter etter nyheter og skriver replikk..."):
                 nyheter = finn_nyheter(nytt_firma)
