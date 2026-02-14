@@ -27,7 +27,6 @@ def bruk_stil():
             background-color: #FFFFFF;
         }}
         
-        /* Knapper - Farge 368373 med 2px avrunding */
         .stButton>button {{
             background-color: #368373;
             color: white;
@@ -44,7 +43,6 @@ def bruk_stil():
             border: none;
         }}
 
-        /* Inndatafelt - Hvit bakgrunn og 2px avrunding */
         .stTextInput>div>div>input {{
             background-color: #FFFFFF !important;
             border-radius: 2px;
@@ -53,7 +51,6 @@ def bruk_stil():
             color: #003642;
         }}
 
-        /* Strategisk boks - Rent design uten bakgrunnsfarge */
         .stAlert {{
             background-color: transparent !important;
             border: none !important;
@@ -63,7 +60,6 @@ def bruk_stil():
             padding-left: 1.5rem;
         }}
 
-        /* Overskrifter */
         h1, h2, h3 {{
             color: #003642;
             font-weight: 600;
@@ -75,7 +71,6 @@ def bruk_stil():
             opacity: 0.1;
         }}
 
-        /* Avstand fra toppen */
         .block-container {{
             padding-top: 5rem;
         }}
@@ -85,16 +80,23 @@ def bruk_stil():
         </style>
     """, unsafe_allow_html=True)
 
-# Scroll til toppen (JS-snutt)
-def scroll_to_top():
-    st.markdown(
-        """
-        <script>
-        window.scrollTo(0, 0);
-        </script>
-        """,
-        unsafe_allow_html=True,
-    )
+# --- APP START ---
+st.set_page_config(page_title="Compend Insights", layout="wide")
+bruk_stil()
+
+# Anker på toppen
+st.markdown('<a id="top"></a>', unsafe_allow_html=True)
+
+if "mine_leads" not in st.session_state:
+    st.session_state.mine_leads = []
+if "hoved_firma" not in st.session_state:
+    st.session_state.hoved_firma = None
+if "soke_felt" not in st.session_state:
+    st.session_state.soke_felt = ""
+if "forrige_sok" not in st.session_state:
+    st.session_state.forrige_sok = ""
+if "scroll_to_top" not in st.session_state:
+    st.session_state.scroll_to_top = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -174,30 +176,6 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
-# --- APP START ---
-st.set_page_config(page_title="Compend Insights", layout="wide")
-bruk_stil()
-
-if "mine_leads" not in st.session_state:
-    st.session_state.mine_leads = []
-if "hoved_firma" not in st.session_state:
-    st.session_state.hoved_firma = None
-if "soke_felt" not in st.session_state:
-    st.session_state.soke_felt = ""
-if "forrige_sok" not in st.session_state:
-    st.session_state.forrige_sok = ""
-
-# Søkefelt
-col_l, col_m, col_r = st.columns([1, 2, 1])
-with col_m:
-    org_input = st.text_input(
-        "Søk på organisasjonsnummer",
-        value=st.session_state.soke_felt,
-        label_visibility="collapsed",
-        placeholder="Tast inn organisasjonsnummer (9 siffer)",
-    )
-    start_knapp = st.button("Analyser selskap", use_container_width=True)
-
 def utfor_analyse(orgnr):
     hoved = hent_firma_data(orgnr)
     if hoved:
@@ -220,19 +198,30 @@ def utfor_analyse(orgnr):
             st.session_state.mine_leads = [
                 e for e in alle if e["organisasjonsnummer"] != orgnr
             ]
+        # Sett flagg for scroll
+        st.session_state.scroll_to_top = True
     else:
         st.error("Ugyldig organisasjonsnummer.")
+
+# Søkefelt
+col_l, col_m, col_r = st.columns([1, 2, 1])
+with col_m:
+    org_input = st.text_input(
+        "Søk på organisasjonsnummer",
+        value=st.session_state.soke_felt,
+        label_visibility="collapsed",
+        placeholder="Tast inn organisasjonsnummer (9 siffer)",
+    )
+    start_knapp = st.button("Analyser selskap", use_container_width=True)
 
 # Automatisk analyse ved direkte orgnr-innskriving
 if (org_input != st.session_state.forrige_sok and len(org_input) == 9):
     utfor_analyse(org_input)
-    scroll_to_top()
     st.rerun()
 
 # Manuell analyse-knapp
 if start_knapp:
     utfor_analyse(org_input)
-    scroll_to_top()
     st.rerun()
 
 # --- VISNING ---
@@ -286,6 +275,20 @@ if st.session_state.hoved_firma:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
                         utfor_analyse(lead["organisasjonsnummer"])
-                        scroll_to_top()
                         st.rerun()
                 st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+
+# Nederst i appen: hvis vi nettopp har analysert et nytt selskap, naviger til #top
+if st.session_state.get("scroll_to_top", False):
+    st.session_state.scroll_to_top = False
+    st.markdown(
+        """
+        <script>
+        const topAnchor = document.querySelector("a[id='top']");
+        if (topAnchor) {
+            topAnchor.scrollIntoView({ behavior: "instant", block: "start" });
+        }
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
