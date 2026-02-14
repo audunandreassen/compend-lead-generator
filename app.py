@@ -85,6 +85,17 @@ def bruk_stil():
         </style>
     """, unsafe_allow_html=True)
 
+# Scroll til toppen (JS-snutt)
+def scroll_to_top():
+    st.markdown(
+        """
+        <script>
+        window.scrollTo(0, 0);
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
     try:
@@ -116,23 +127,49 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     try:
         svar = klient.chat.completions.create(
             model=modell_navn, 
-            messages=[{"role": "system", "content": "Du er en profesjonell salgsrådgiver for Compend. Du bruker aldri emojier."}, {"role": "user", "content": prompt}]
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Du er en profesjonell salgsrådgiver for Compend. Du bruker aldri emojier."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
         )
         return svar.choices[0].message.content
     except:
         return "Kunne ikke generere analyse."
 
 def finn_eposter(domene):
-    if not domene: return []
-    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+    if not domene:
+        return []
+    rent_domene = (
+        domene.replace("https://", "")
+        .replace("http://", "")
+        .replace("www.", "")
+        .split("/")[0]
+    )
     try:
-        res = requests.get("https://api.hunter.io/v2/domain-search", params={"domain": rent_domene, "api_key": st.secrets["HUNTER_API_KEY"], "limit": 5})
-        return [e["value"] for e in res.json().get("data", {}).get("emails", [])] if res.status_code == 200 else []
-    except: return []
+        res = requests.get(
+            "https://api.hunter.io/v2/domain-search",
+            params={
+                "domain": rent_domene,
+                "api_key": st.secrets["HUNTER_API_KEY"],
+                "limit": 5,
+            },
+        )
+        return [
+            e["value"] for e in res.json().get("data", {}).get("emails", [])
+        ] if res.status_code == 200 else []
+    except:
+        return []
 
 def formater_adresse(f):
     adr = f.get("forretningsadresse", {})
-    if not adr: return "Ingen adresse registrert"
+    if not adr:
+        return "Ingen adresse registrert"
     gate = adr.get("adresse", [""])[0]
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
@@ -141,16 +178,24 @@ def formater_adresse(f):
 st.set_page_config(page_title="Compend Insights", layout="wide")
 bruk_stil()
 
-if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
-if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
-if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
-if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
-if "scroll_til_topp" not in st.session_state: st.session_state.scroll_til_topp = False
+if "mine_leads" not in st.session_state:
+    st.session_state.mine_leads = []
+if "hoved_firma" not in st.session_state:
+    st.session_state.hoved_firma = None
+if "soke_felt" not in st.session_state:
+    st.session_state.soke_felt = ""
+if "forrige_sok" not in st.session_state:
+    st.session_state.forrige_sok = ""
 
 # Søkefelt
 col_l, col_m, col_r = st.columns([1, 2, 1])
 with col_m:
-    org_input = st.text_input("Søk på organisasjonsnummer", value=st.session_state.soke_felt, label_visibility="collapsed", placeholder="Tast inn organisasjonsnummer (9 siffer)")
+    org_input = st.text_input(
+        "Søk på organisasjonsnummer",
+        value=st.session_state.soke_felt,
+        label_visibility="collapsed",
+        placeholder="Tast inn organisasjonsnummer (9 siffer)",
+    )
     start_knapp = st.button("Analyser selskap", use_container_width=True)
 
 def utfor_analyse(orgnr):
@@ -158,24 +203,36 @@ def utfor_analyse(orgnr):
     if hoved:
         st.session_state.hoved_firma = hoved
         st.session_state.forrige_sok = orgnr
-        nyheter = finn_nyheter(hoved['navn'])
-        st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent'))
-        st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
+        nyheter = finn_nyheter(hoved["navn"])
+        st.session_state.isbryter = lag_isbryter(
+            hoved["navn"],
+            nyheter,
+            hoved.get("naeringskode1", {}).get("beskrivelse", "Ukjent"),
+        )
+        st.session_state.eposter = finn_eposter(hoved.get("hjemmeside"))
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
-            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
+            res = requests.get(
+                brreg_adresse, params={"naeringskode": kode, "size": 100}
+            ).json()
             alle = res.get("_embedded", {}).get("enheter", [])
-            st.session_state.mine_leads = [e for e in alle if e['organisasjonsnummer'] != orgnr]
+            st.session_state.mine_leads = [
+                e for e in alle if e["organisasjonsnummer"] != orgnr
+            ]
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
+# Automatisk analyse ved direkte orgnr-innskriving
 if (org_input != st.session_state.forrige_sok and len(org_input) == 9):
     utfor_analyse(org_input)
+    scroll_to_top()
     st.rerun()
 
+# Manuell analyse-knapp
 if start_knapp:
     utfor_analyse(org_input)
+    scroll_to_top()
     st.rerun()
 
 # --- VISNING ---
@@ -183,15 +240,7 @@ if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
     st.markdown("<hr>", unsafe_allow_html=True)
     
-    st.subheader(f.get('navn'))
-
-    if st.session_state.get("scroll_til_topp"):
-        st.components.v1.html("""
-        <script>
-            window.parent.scrollTo({top: 0, behavior: 'smooth'});
-        </script>
-        """, height=0)
-        st.session_state.scroll_til_topp = False
+    st.subheader(f.get("navn"))
     
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
@@ -201,24 +250,24 @@ if st.session_state.hoved_firma:
     with c2:
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke oppgitt')}")
         st.write(f"**Adresse:** {formater_adresse(f)}")
-        if st.session_state.get('eposter'):
+        if st.session_state.get("eposter"):
             st.write(f"**E-postadresser:** {', '.join(st.session_state.eposter)}")
     with c3:
         if st.button("Overfør til HubSpot", use_container_width=True):
             data_pakke = {
-                "firma": f['navn'],
-                "orgnr": f['organisasjonsnummer'],
-                "isbryter": st.session_state.get('isbryter'),
-                "bransje": f.get('naeringskode1', {}).get('beskrivelse'),
-                "ansatte": f.get('antallAntatte'),
+                "firma": f["navn"],
+                "orgnr": f["organisasjonsnummer"],
+                "isbryter": st.session_state.get("isbryter"),
+                "bransje": f.get("naeringskode1", {}).get("beskrivelse"),
+                "ansatte": f.get("antallAntatte"),
                 "adresse": formater_adresse(f),
-                "nettside": f.get('hjemmeside'),
-                "eposter": ", ".join(st.session_state.get('eposter', []))
+                "nettside": f.get("hjemmeside"),
+                "eposter": ", ".join(st.session_state.get("eposter", [])),
             }
             requests.post(zapier_mottaker, json=data_pakke)
             st.success("Data overført")
 
-    st.info(st.session_state.get('isbryter'))
+    st.info(st.session_state.get("isbryter"))
     
     if st.session_state.mine_leads:
         st.markdown("<hr>", unsafe_allow_html=True)
@@ -229,10 +278,14 @@ if st.session_state.hoved_firma:
                 col_a, col_b = st.columns([4, 1])
                 with col_a:
                     st.write(f"**{lead['navn']}** | {lead.get('antallAntatte', 0)} ansatte")
-                    st.write(f"{lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')} | {lead.get('hjemmeside', 'Ingen nettside')}")
+                    st.write(
+                        f"{lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')} | "
+                        f"{lead.get('hjemmeside', 'Ingen nettside')}"
+                    )
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
-                        st.session_state.soke_felt = lead['organisasjonsnummer']
-                        st.session_state.scroll_til_topp = True
+                        st.session_state.soke_felt = lead["organisasjonsnummer"]
+                        utfor_analyse(lead["organisasjonsnummer"])
+                        scroll_to_top()
                         st.rerun()
                 st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
