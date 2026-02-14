@@ -13,66 +13,73 @@ modell_navn = "gpt-4o-mini"
 
 # --- DESIGN OG STYLING ---
 def bruk_stil():
-    st.markdown("""
+    st.markdown(f"""
         <style>
-        /* Importerer en ren sans-serif font som ligner Compend sin */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
         
-        html, body, [class*="css"] {
+        html, body, [class*="css"] {{
             font-family: 'Inter', sans-serif;
-            color: #1A2B3D;
-        }
+            color: #003642;
+            background-color: #FFFFFF;
+        }}
 
-        /* Bakgrunnsfarge og header */
-        .main {
-            background-color: #F8FAFC;
-        }
+        /* Bakgrunn for hele siden */
+        .stApp {{
+            background-color: #FFFFFF;
+        }}
         
-        /* Knapper - Compend Blå/Turkis */
-        .stButton>button {
-            background-color: #004B87;
+        /* Knapper - Bruker fargen 368373 */
+        .stButton>button {{
+            background-color: #368373;
             color: white;
-            border-radius: 4px;
+            border-radius: 2px;
             border: none;
-            padding: 10px 20px;
-            transition: 0.3s;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
+            padding: 8px 16px;
+            transition: 0.2s;
+            font-weight: 400;
+            text-transform: none;
+        }}
         
-        .stButton>button:hover {
-            background-color: #0072CE;
+        .stButton>button:hover {{
+            background-color: #003642;
             color: white;
-        }
+        }}
 
         /* Inndatafelt */
-        .stTextInput>div>div>input {
-            border-radius: 4px;
-        }
+        .stTextInput>div>div>input {{
+            border-radius: 2px;
+            border: 1px solid #368373;
+        }}
 
-        /* Strategisk boks (Warning-boks) */
-        .stAlert {
-            background-color: #EBF5FF;
-            border-left: 5px solid #004B87;
-            color: #1A2B3D;
-            border-radius: 4px;
-        }
+        /* Strategisk boks - Lys variant av 003642 for lesbarhet, med mørk kant */
+        .stAlert {{
+            background-color: #F0F4F5;
+            border-left: 4px solid #003642;
+            color: #003642;
+            border-radius: 0px;
+        }}
 
-        /* Divider og overskrifter */
-        h1, h2, h3 {
-            color: #004B87;
+        /* Overskrifter - Bruker fargen 003642 */
+        h1, h2, h3 {{
+            color: #003642;
             font-weight: 600;
-        }
+            margin-bottom: 1rem;
+        }}
         
-        hr {
-            margin-top: 2rem;
-            margin-bottom: 2rem;
-        }
+        /* Divider */
+        hr {{
+            border: 0;
+            border-top: 1px solid #368373;
+            opacity: 0.2;
+        }}
 
-        /* Skjul Streamlit-branding */
-        #MainMenu {visibility: hidden;}
-        footer {visibility: hidden;}
+        /* Fjerner padding på toppen for å få søkefeltet helt opp */
+        .block-container {{
+            padding-top: 2rem;
+        }}
+
+        #MainMenu {{visibility: hidden;}}
+        footer {{visibility: hidden;}}
         </style>
     """, unsafe_allow_html=True)
 
@@ -99,9 +106,9 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     Bransje: {bransje}
     Innsikt: {nyhetstekst}
     OPPGAVE:
-    Skriv en analyse på maks 3 korte setninger. 
+    Skriv en analyse på maks 3 korte setninger som selgeren kan bruke. 
     1. Ingen hilsener eller emojier. 
-    2. KNYTT innsikten direkte til hvordan Compends løsninger kan hjelpe.
+    2. KNYTT innsikten direkte til Compends løsninger.
     3. Foreslå en konkret tittel å kontakte.
     """
     try:
@@ -129,21 +136,19 @@ def formater_adresse(f):
     return f"{gate}, {post}".strip(", ")
 
 # --- APP START ---
-st.set_page_config(page_title="Compend Market Insights", layout="wide")
+st.set_page_config(page_title="Compend Insights", layout="wide")
 bruk_stil()
-
-st.title("Compend Market Insights")
 
 if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
 
-# Søkefelt
+# Søkefelt øverst på siden
 col_l, col_m, col_r = st.columns([1, 2, 1])
 with col_m:
-    org_input = st.text_input("Skriv inn organisasjonsnummer for analyse", value=st.session_state.soke_felt)
-    start_knapp = st.button("Start analyse", use_container_width=True)
+    org_input = st.text_input("Søk på organisasjonsnummer", value=st.session_state.soke_felt, label_visibility="collapsed", placeholder="Organisasjonsnummer (9 siffer)")
+    start_knapp = st.button("Analyser selskap", use_container_width=True)
 
 def utfor_analyse(orgnr):
     hoved = hent_firma_data(orgnr)
@@ -173,9 +178,9 @@ if start_knapp:
 # --- VISNING ---
 if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
-    st.divider()
+    st.markdown("<hr>", unsafe_allow_html=True)
     
-    st.subheader(f"Fokusbedrift: {f['navn']}")
+    st.subheader(f.get('navn'))
     
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
@@ -188,7 +193,7 @@ if st.session_state.hoved_firma:
         if st.session_state.get('eposter'):
             st.write(f"**E-postadresser:** {', '.join(st.session_state.eposter)}")
     with c3:
-        if st.button("Send til HubSpot", use_container_width=True):
+        if st.button("Overfør til HubSpot", use_container_width=True):
             data_pakke = {
                 "firma": f['navn'],
                 "orgnr": f['organisasjonsnummer'],
@@ -200,13 +205,13 @@ if st.session_state.hoved_firma:
                 "eposter": ", ".join(st.session_state.get('eposter', []))
             }
             requests.post(zapier_mottaker, json=data_pakke)
-            st.success("Data overført til CRM")
+            st.success("Data overført")
 
     st.info(f"**Strategisk analyse**\n\n{st.session_state.get('isbryter')}")
     
     if st.session_state.mine_leads:
-        st.markdown("---")
-        st.subheader(f"Andre selskaper i bransjen ({len(st.session_state.mine_leads)})")
+        st.markdown("<hr>", unsafe_allow_html=True)
+        st.subheader(f"Andre aktører i bransjen")
         
         for i, lead in enumerate(st.session_state.mine_leads):
             with st.container():
@@ -218,4 +223,4 @@ if st.session_state.hoved_firma:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                         st.session_state.soke_felt = lead['organisasjonsnummer']
                         st.rerun()
-                st.divider()
+                st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
