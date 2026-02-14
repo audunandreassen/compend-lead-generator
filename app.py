@@ -69,6 +69,7 @@ def formater_adresse(f):
 st.set_page_config(page_title="Compend Lead-Maskin", layout="wide")
 st.title("📊 Compend AI: Markedsanalyse & Prospektering")
 
+if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
@@ -87,6 +88,12 @@ def utfor_analyse(orgnr):
         nyheter = finn_nyheter(hoved['navn'])
         st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent'))
         st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
+        
+        kode = hoved.get("naeringskode1", {}).get("kode")
+        if kode:
+            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
+            alle = res.get("_embedded", {}).get("enheter", [])
+            st.session_state.mine_leads = [e for e in alle if e['organisasjonsnummer'] != orgnr]
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
@@ -108,7 +115,7 @@ if st.session_state.hoved_firma:
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
         st.write(f"**Org.nr:** {f['organisasjonsnummer']}")
-        st.write(f"**Ansatte:** {f.get('antallAntatte', 'Ukjent')}")
+        st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')}")
     with c2:
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke oppgitt')}")
@@ -122,7 +129,7 @@ if st.session_state.hoved_firma:
                 "orgnr": f['organisasjonsnummer'],
                 "isbryter": st.session_state.get('isbryter'),
                 "bransje": f.get('naeringskode1', {}).get('beskrivelse'),
-                "ansatte": f.get('antallAntatte'),
+                "ansatte": f.get('antallAnsatte'),
                 "adresse": formater_adresse(f),
                 "nettside": f.get('hjemmeside'),
                 "eposter": ", ".join(st.session_state.get('eposter', []))
@@ -131,3 +138,21 @@ if st.session_state.hoved_firma:
             st.success("Lead sendt!")
 
     st.warning(f"**Compend Strategi:** {st.session_state.get('isbryter')}")
+    
+    # LISTE OVER 100 SELSKAPER
+    if st.session_state.mine_leads:
+        st.markdown("---")
+        st.subheader(f"📈 Andre selskaper i bransjen ({len(st.session_state.mine_leads)})")
+        
+        for i, lead in enumerate(st.session_state.mine_leads):
+            with st.container():
+                col_a, col_b = st.columns([4, 1])
+                with col_a:
+                    st.write(f"**{lead['navn']}** | {lead.get('antallAnsatte', 0)} ansatte")
+                    st.write(f"📍 {lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')} | 🌐 {lead.get('hjemmeside', 'Ingen nettside')}")
+                with col_b:
+                    # Kun Analyser-knapp her, for å holde fokus på HubSpot-knappen øverst
+                    if st.button("🔍 Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
+                        st.session_state.soke_felt = lead['organisasjonsnummer']
+                        st.rerun()
+                st.divider()
