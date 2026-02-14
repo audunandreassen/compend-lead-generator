@@ -4,12 +4,20 @@ import pandas as pd
 from duckduckgo_search import DDGS
 from openai import OpenAI
 from io import BytesIO
+import streamlit.components.v1 as components
 
 # Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 modell_navn = "gpt-4o-mini"
+
+# JavaScript for å tvinge rulling til topps
+def scroll_to_top():
+    components.html(
+        "<script>window.parent.document.querySelector('section.main').scrollTo(0,0);</script>",
+        height=0,
+    )
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -24,18 +32,7 @@ def finn_nyheter(firmanavn):
         return "Ingen ferske nyheter."
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
-    # Oppdatert instruks for å også se etter eier-informasjon
-    instruks = f"""
-    Du er en dyktig selger for Compend. 
-    Selskap: {firmanavn}
-    Bransje: {bransje}
-    Info: {nyhetstekst}
-    
-    Oppgave: 
-    1. Skriv en kort åpningsreplikk (2 setninger).
-    2. Nevn spesifikt hvem selgeren bør spørre etter (f.eks. Daglig leder eller HR-direktør).
-    3. Hvis infoen antyder hvem som eier selskapet eller om det er et familieeid selskap, nevn dette kort som et tips til selgeren.
-    """
+    instruks = f"Skriv en kort åpningsreplikk (2 setninger) til {firmanavn} ({bransje}) basert på: {nyhetstekst}. Nevn hvem man bør snakke med og eventuelle eiertips."
     try:
         svar = klient.chat.completions.create(model=modell_navn, messages=[{"role": "user", "content": instruks}])
         return svar.choices[0].message.content
@@ -48,8 +45,7 @@ def finn_eposter(domene):
     try:
         res = requests.get("https://api.hunter.io/v2/domain-search", params={"domain": rent_domene, "api_key": st.secrets["HUNTER_API_KEY"], "limit": 3})
         return [e["value"] for e in res.json().get("data", {}).get("emails", [])] if res.status_code == 200 else []
-    except:
-        return []
+    except: return []
 
 def to_excel(df):
     output = BytesIO()
@@ -59,18 +55,13 @@ def to_excel(df):
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Compend AI Market Insights", layout="wide")
-
-# Korrigert anker (unsafe_allow_html=True)
-st.markdown("<div id='top'></div>", unsafe_allow_html=True)
-
 st.title("📊 Compend AI: Markedsanalyse & Leads")
 
-# Initialiser session state
 if "side_nummer" not in st.session_state: st.session_state.side_nummer = 0
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
+if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 
-# Søkefelt
 col_l, col_m, col_r = st.columns([1, 2, 1])
 with col_m:
     org_input = st.text_input("Skriv inn org.nummer for dyp analyse:", value=st.session_state.soke_felt)
@@ -84,57 +75,51 @@ def utfor_sok(orgnr):
         st.session_state.forrige_sok = orgnr
         kode = hoved_firma.get("naeringskode1", {}).get("kode")
         if kode:
-            params = {"naeringskode": kode, "size": 15, "page": 0, "fraAntallAnsatte": 10}
+            # Vi henter 30 selskaper (større buffer) for å sikre at vi sitter igjen med nok etter filter
+            params = {"naeringskode": kode, "size": 30, "page": 0, "fraAntallAnsatte": 10}
             res = requests.get(brreg_adresse, params=params).json()
-            st.session_state.mine_leads = res.get("_embedded", {}).get("enheter", [])
+            st.session_state.mine_leads = res.get("_embedded", {}).get("enheter", [])[:15]
     else:
         st.error("Fant ikke selskapet.")
 
-# Automatisk søk og rulling
-if org_input != st.session_state.forrige_sok and len(org_input) == 9:
-    utfor_sok(org_input)
+if (org_input != st.session_state.forrige_sok and len(org_input) == 9) or start_knapp:
+    utfor_sok(org_input if not start_knapp else org_input)
+    scroll_to_top() # Tvinger rulling til topps
     st.rerun()
 
-if start_knapp:
-    utfor_sok(org_input)
-
-# --- VISNING ---
 if "hoved_firma" in st.session_state:
     f = st.session_state.hoved_firma
     st.markdown(f"## 🎯 Hovedfokus: {f['navn']}")
     
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col1:
-        st.subheader("Bedriftsinfo")
+    c1, c2, c3 = st.columns([2, 2, 1])
+    with c1:
         st.write(f"**Org.nr:** {f['organisasjonsnummer']}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse')}")
         st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
-    with col2:
-        st.subheader("Lokasjon & Web")
+    with c2:
         adr = f.get("forretningsadresse", {})
         st.write(f"**Adresse:** {adr.get('adresse', [''])[0]}, {adr.get('postnummer', '')} {adr.get('poststed', '')}")
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke registrert')}")
-    with col3:
-        st.subheader("Handling")
+    with c3:
         if st.button("🚀 Send til HubSpot", use_container_width=True, type="primary"):
-            st.toast("Sender til HubSpot...")
+            st.toast("Sender...")
 
     with st.expander("✨ AI-Analyse (Isbryter & Eierskap)", expanded=True):
-        with st.spinner("Analyserer eierskap og nyheter..."):
+        with st.spinner("Analyserer..."):
             nyheter = finn_nyheter(f['navn'])
             replikk = lag_isbryter(f['navn'], nyheter, f.get('naeringskode1', {}).get('beskrivelse'))
             eposter = finn_eposter(f.get('hjemmeside'))
         st.markdown(f"**Strategi:** {replikk}")
-        if eposter: st.write(f"**Kontaktinfo funnet:** {', '.join(eposter)}")
+        if eposter: st.write(f"**Kontaktinfo:** {', '.join(eposter)}")
     
-    if "mine_leads" in st.session_state:
+    if st.session_state.mine_leads:
         st.markdown("### 📈 Markedssammenligning")
-        sammenligning_data = [{"Selskap": f['navn'] + " (Hoved)", "Ansatte": f.get('antallAnsatte', 0), "Kommune": f.get('forretningsadresse', {}).get('kommune', 'Ukjent')}]
+        df_data = [{"Selskap": f['navn'] + " (Hoved)", "Ansatte": f.get('antallAnsatte', 0), "Kommune": f.get('forretningsadresse', {}).get('kommune', 'Ukjent')}]
         for l in st.session_state.mine_leads[:5]:
             if l['organisasjonsnummer'] != f['organisasjonsnummer']:
-                sammenligning_data.append({"Selskap": l['navn'], "Ansatte": l.get('antallAnsatte', 0), "Kommune": l.get('forretningsadresse', {}).get('kommune', 'Ukjent')})
+                df_data.append({"Selskap": l['navn'], "Ansatte": l.get('antallAnsatte', 0), "Kommune": l.get('forretningsadresse', {}).get('kommune', 'Ukjent')})
         
-        df = pd.DataFrame(sammenligning_data)
+        df = pd.DataFrame(df_data)
         st.table(df)
         st.download_button("📥 Last ned Excel-rapport", data=to_excel(df), file_name=f"rapport_{f['navn']}.xlsx", use_container_width=True)
         st.bar_chart(df.set_index("Selskap")["Ansatte"])
@@ -143,23 +128,23 @@ if "hoved_firma" in st.session_state:
         for lead in st.session_state.mine_leads:
             if lead['organisasjonsnummer'] == f['organisasjonsnummer']: continue
             with st.container():
-                c1, c2, c3 = st.columns([3, 1, 1])
-                with c1:
-                    st.write(f"**{lead['navn']}** ({lead.get('antallAnsatte', 0)} ansatte)")
-                with c2:
+                l1, l2, l3 = st.columns([3, 1, 1])
+                with l1: st.write(f"**{lead['navn']}** ({lead.get('antallAnsatte', 0)} ansatte)")
+                with l2:
                     if st.button("🔍 Analyser", key=f"s_{lead['organisasjonsnummer']}"):
                         st.session_state.soke_felt = lead['organisasjonsnummer']
                         st.rerun()
-                with c3:
+                with l3:
                     if st.button("➕ Send", key=f"z_{lead['organisasjonsnummer']}"):
-                        st.toast(f"Sendte {lead['navn']} til Zapier")
+                        st.toast("Sendt!")
                 st.divider()
 
         if st.button("Last inn 15 flere selskaper...", use_container_width=True):
             st.session_state.side_nummer += 1
             kode = st.session_state.hoved_firma.get("naeringskode1", {}).get("kode")
-            params = {"naeringskode": kode, "size": 15, "page": st.session_state.side_nummer, "fraAntallAnsatte": 10}
+            # Henter 40 selskaper her for å være helt sikker på å fylle på listen
+            params = {"naeringskode": kode, "size": 40, "page": st.session_state.side_nummer, "fraAntallAnsatte": 10}
             res = requests.get(brreg_adresse, params=params).json()
             nye_leads = res.get("_embedded", {}).get("enheter", [])
-            st.session_state.mine_leads.extend(nye_leads)
+            st.session_state.mine_leads.extend(nye_leads[:15])
             st.rerun()
