@@ -48,6 +48,10 @@ def to_excel(df):
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Compend AI Market Insights", layout="wide")
+
+# 1. Vi legger inn et anker helt øverst på siden
+st.markdown("<div id='top'></div>", unsafe_allow_path=True)
+
 st.title("📊 Compend AI: Markedsanalyse & Leads")
 
 # Initialiser session state
@@ -61,7 +65,7 @@ with col_m:
     org_input = st.text_input("Skriv inn org.nummer for dyp analyse:", value=st.session_state.soke_felt)
     start_knapp = st.button("Start Markedsanalyse", use_container_width=True)
 
-# FUNKSJON FOR SØK (brukes av både knappen og "Analyser"-knappene)
+# FUNKSJON FOR SØK
 def utfor_sok(orgnr):
     st.session_state.side_nummer = 0
     hoved_firma = hent_firma_data(orgnr)
@@ -76,13 +80,16 @@ def utfor_sok(orgnr):
     else:
         st.error("Fant ikke selskapet.")
 
-# Sjekk om vi skal trigge et nytt søk automatisk (når Analyser-knappen er trykket)
+# Sjekk automatisk søk
 if org_input != st.session_state.forrige_sok and len(org_input) == 9:
     utfor_sok(org_input)
+    # 2. Her ber vi siden hoppe til ankeret 'top' når den laster på nytt
+    st.query_params["anchor"] = "top"
     st.rerun()
 
 if start_knapp:
     utfor_sok(org_input)
+    st.query_params["anchor"] = "top"
 
 # --- VISNING ---
 if "hoved_firma" in st.session_state:
@@ -141,7 +148,6 @@ if "hoved_firma" in st.session_state:
                         st.toast("Sendt!")
                 st.divider()
 
-        # Last inn flere selskaper (Paginering)
         if st.button("Last inn 15 flere selskaper...", use_container_width=True):
             st.session_state.side_nummer += 1
             kode = st.session_state.hoved_firma.get("naeringskode1", {}).get("kode")
