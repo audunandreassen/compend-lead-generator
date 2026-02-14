@@ -29,10 +29,7 @@ def finn_nyheter(firmanavn):
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
     prompt = f"Lag en profesjonell isbryter på 2 setninger for {firmanavn} i bransjen {bransje} basert på: {nyhetstekst}. Foreslå kontaktperson uten å gjette navn."
     try:
-        svar = klient.chat.completions.create(
-            model=modell_navn, 
-            messages=[{"role": "user", "content": prompt}]
-        )
+        svar = klient.chat.completions.create(model=modell_navn, messages=[{"role": "user", "content": prompt}])
         return svar.choices[0].message.content
     except:
         return "Kunne ikke generere analyse."
@@ -52,14 +49,13 @@ st.title("📊 Compend AI: Markedsanalyse")
 if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
+if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
 
-org_input = st.text_input("Organisasjonsnummer:", value=st.session_state.soke_felt)
-
-if st.button("Start Analyse", use_container_width=True):
-    hoved = hent_firma_data(org_input)
+def utfor_analyse(orgnr):
+    hoved = hent_firma_data(orgnr)
     if hoved:
         st.session_state.hoved_firma = hoved
-        # Henter isbryter og eposter med en gang så de ligger klare i minnet
+        st.session_state.forrige_sok = orgnr
         nyheter = finn_nyheter(hoved['navn'])
         st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent'))
         st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
@@ -68,16 +64,26 @@ if st.button("Start Analyse", use_container_width=True):
         if kode:
             res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 50}).json()
             alle = res.get("_embedded", {}).get("enheter", [])
-            st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != org_input][:10]
-        st.rerun()
+            st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != orgnr][:10]
+    else:
+        st.error("Ugyldig organisasjonsnummer.")
+
+# Inndatafelt
+org_input = st.text_input("Organisasjonsnummer:", value=st.session_state.soke_felt)
+
+# Vaktpost: Hvis feltet endrer seg (f.eks. via Analyser-knapp), kjør analyse automatisk
+if org_input != st.session_state.forrige_sok and len(org_input) == 9:
+    utfor_analyse(org_input)
+    st.rerun()
+
+if st.button("Start Analyse", use_container_width=True):
+    utfor_analyse(org_input)
+    st.rerun()
 
 if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
+    st.divider()
     st.subheader(f"🎯 {f['navn']}")
-    
-    # Samle all data som skal sendes
-    full_adresse = f"{f.get('forretningsadresse', {}).get('adresse', [''])[0]}, {f.get('forretningsadresse', {}).get('postnummer', '')} {f.get('forretningsadresse', {}).get('poststed', '')}"
-    epost_tekst = ", ".join(st.session_state.get('eposter', []))
     
     col1, col2 = st.columns(2)
     with col1:
@@ -85,21 +91,19 @@ if st.session_state.hoved_firma:
         st.write(f"**Ansatte:** {f.get('antallAnsatte')}")
     with col2:
         if st.button("🚀 Send til HubSpot", type="primary"):
+            full_adresse = f"{f.get('forretningsadresse', {}).get('adresse', [''])[0]}, {f.get('forretningsadresse', {}).get('postnummer', '')} {f.get('forretningsadresse', {}).get('poststed', '')}"
             data_pakke = {
                 "firma": f['navn'],
                 "organisasjonsnummer": f['organisasjonsnummer'],
                 "isbryter": st.session_state.get('isbryter'),
-                "eposter": epost_tekst,
+                "eposter": ", ".join(st.session_state.get('eposter', [])),
                 "bransje": f.get('naeringskode1', {}).get('beskrivelse'),
                 "ansatte": f.get('antallAnsatte'),
                 "adresse": full_adresse,
                 "nettside": f.get('hjemmeside')
             }
-            svar = requests.post(zapier_mottaker, json=data_pakke)
-            if svar.status_code == 200:
-                st.success(f"Sendt til HubSpot!")
-            else:
-                st.error(f"Feil ved sending: {svar.status_code}")
+            requests.post(zapier_mottaker, json=data_pakke)
+            st.success("Sendt!")
 
     st.info(st.session_state.get('isbryter'))
     
@@ -109,6 +113,7 @@ if st.session_state.hoved_firma:
         for i, lead in enumerate(st.session_state.mine_leads):
             c1, c2 = st.columns([4, 1])
             c1.write(f"**{lead['navn']}** ({lead.get('antallAnsatte')} ansatte)")
-            if c2.button("Analyser", key=f"an_{i}"):
+            # Denne knappen endrer soke_felt, som fanges opp av vaktposten øverst
+            if c2.button("Analyser", key=f"an_{lead['organisasjonsnummer']}"):
                 st.session_state.soke_felt = lead['organisasjonsnummer']
                 st.rerun()
