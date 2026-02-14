@@ -69,7 +69,6 @@ def formater_adresse(f):
 st.set_page_config(page_title="Compend Lead-Maskin", layout="wide")
 st.title("📊 Compend AI: Markedsanalyse & Prospektering")
 
-if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
@@ -88,12 +87,6 @@ def utfor_analyse(orgnr):
         nyheter = finn_nyheter(hoved['navn'])
         st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent'))
         st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
-        
-        kode = hoved.get("naeringskode1", {}).get("kode")
-        if kode:
-            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
-            alle = res.get("_embedded", {}).get("enheter", [])
-            st.session_state.mine_leads = [e for e in alle if e['organisasjonsnummer'] != orgnr]
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
@@ -138,39 +131,3 @@ if st.session_state.hoved_firma:
             st.success("Lead sendt!")
 
     st.warning(f"**Compend Strategi:** {st.session_state.get('isbryter')}")
-    
-    if st.session_state.mine_leads:
-        st.markdown("---")
-        st.subheader(f"📈 Relevante selskaper i bransjen ({len(st.session_state.mine_leads)})")
-        
-        # Enkel oversiktstabell
-        df_leads = pd.DataFrame([
-            {
-                "Selskap": l['navn'],
-                "Ansatte": l.get('antallAntatte', 0),
-                "Sted": l.get('forretningsadresse', {}).get('poststed', 'Ukjent'),
-                "Nettside": l.get('hjemmeside', '-')
-            } for l in st.session_state.mine_leads[:15]
-        ])
-        st.table(df_leads)
-
-        st.write("#### Alle leads (detaljert liste)")
-        for i, lead in enumerate(st.session_state.mine_leads):
-            with st.expander(f"{lead['navn']} ({lead.get('antallAnsatte', 0)} ansatte) - {lead.get('forretningsadresse', {}).get('poststed', '')}"):
-                col_a, col_b = st.columns([3, 1])
-                with col_a:
-                    st.write(f"**Org.nr:** {lead['organisasjonsnummer']}")
-                    st.write(f"**Adresse:** {formater_adresse(lead)}")
-                    st.write(f"**Nettside:** {lead.get('hjemmeside', 'Ikke oppgitt')}")
-                with col_b:
-                    if st.button("🔍 Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
-                        st.session_state.soke_felt = lead['organisasjonsnummer']
-                        st.rerun()
-                    if st.button("➕ Send HubSpot", key=f"zap_{lead['organisasjonsnummer']}_{i}"):
-                        requests.post(zapier_mottaker, json={
-                            "firma": lead['navn'], 
-                            "orgnr": lead['organisasjonsnummer'],
-                            "adresse": formater_adresse(lead),
-                            "nettside": lead.get('hjemmeside')
-                        })
-                        st.toast(f"Sendte {lead['navn']}")
