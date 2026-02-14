@@ -2,3 +2,5 @@ streamlit
 requests
 openai
 duckduckgo_search
+pandas
+xlsxwriter
