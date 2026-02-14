@@ -7,9 +7,33 @@ brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# Vi bygger modellnavnet slik for å unngå spesialtegn
 modell_navn = "gpt" + chr(45) + "4o" + chr(45) + "mini"
+
+# Ny funksjon for å finne epostadresser via Hunter
+def finn_eposter(domene):
+    if not domene:
+        return []
+        
+    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "")
+    
+    # Vi bruker chr for å bygge lenken til databasen
+    hunter_url = "https://api.hunter.io/v2/domain" + chr(45) + "search"
+    
+    # Sjekker om nøkkelen finnes i bankboksen
+    if "HUNTER_API_KEY" in st.secrets:
+        hunter_nokkel = st.secrets["HUNTER_API_KEY"]
+        parametere = {"domain": rent_domene, "api_key": hunter_nokkel, "limit": 3}
+        
+        try:
+            hunter_svar = requests.get(hunter_url, params=parametere)
+            if hunter_svar.status_code == 200:
+                data = hunter_svar.json()
+                eposter = [epost["value"] for epost in data["data"]["emails"]]
+                return eposter
+        except Exception:
+            pass
+            
+    return []
 
 def finn_nyheter(firmanavn):
     try:
@@ -70,8 +94,6 @@ if len(st.session_state.mine_leads) > 0:
         nytt_orgnr = treff["organisasjonsnummer"]
         
         bransje_navn = treff.get("naeringskode1", {}).get("beskrivelse", "Ukjent bransje")
-        
-        # Her henter vi ut nettsiden fra den offentlige informasjonen
         nettside = treff.get("hjemmeside", "")
         
         with st.container():
@@ -79,24 +101,32 @@ if len(st.session_state.mine_leads) > 0:
             st.write(f"Organisasjonsnummer: {nytt_orgnr}")
             st.write(f"Bransje: {bransje_navn}")
             
-            # Hvis selskapet har en registrert nettside viser vi en klikkbar lenke
             if nettside:
-                # Vi legger til riktig protokoll hvis den mangler
                 if not nettside.startswith("http"):
                     nettside = "https://" + nettside
-                st.markdown(f"[Klikk her for å besøke nettsiden til {nytt_firma}]({nettside})")
+                st.markdown(f"[Besøk nettsiden til {nytt_firma}]({nettside})")
             
-            with st.spinner("Leter etter nyheter og skriver replikk..."):
+            with st.spinner("Leter etter nyheter, kontaktinfo og skriver replikk..."):
                 nyheter = finn_nyheter(nytt_firma)
                 replikk = lag_ekte_isbryter(nytt_firma, nyheter, bransje_navn)
+                funnede_eposter = finn_eposter(nettside)
+            
+            if funnede_eposter:
+                st.write("Fant følgende epostadresser:")
+                for epost in funnede_eposter:
+                    st.write(f"* {epost}")
+            else:
+                st.write("Fant ingen epostadresser automatisk.")
             
             st.info(f"Forslag til selger: {replikk}")
             
             if st.button(f"Send {nytt_firma} til HubSpot", key=nytt_orgnr):
+                epost_tekst = ", ".join(funnede_eposter)
                 lead_pakke = {
                     "firma": nytt_firma,
                     "organisasjonsnummer": nytt_orgnr,
-                    "isbryter": replikk
+                    "isbryter": replikk,
+                    "eposter": epost_tekst
                 }
                 requests.post(zapier_mottaker, json=lead_pakke)
                 st.success(f"Suksess! {nytt_firma} ble sendt til HubSpot via Zapier.")
