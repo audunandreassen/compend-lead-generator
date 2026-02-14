@@ -6,7 +6,6 @@ import openai
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 
-# Her henter vi nøkkelen trygt fra Streamlit sin bankboks!
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 def finn_nyheter(firmanavn):
@@ -18,15 +17,13 @@ def finn_nyheter(firmanavn):
                 innhold += " " + resultater[1]["body"]
             return innhold
         else:
-            return "Fant ingen store nyheter om selskapet nylig."
+            return "Ingen ferske nyheter."
     except Exception:
-        return "Klarte ikke å søke etter nyheter."
+        return "Ingen ferske nyheter."
 
-def lag_ekte_isbryter(firmanavn, nyhetstekst):
-    if "Fant ingen store nyheter" in nyhetstekst or "Klarte ikke" in nyhetstekst:
-        return f"Hei! Vi ser at det er god aktivitet hos {firmanavn} om dagen. Hvordan rigger dere bedriften for å sikre at de ansatte har oppdatert kompetanse?"
-    
-    instruks = f"Du er en dyktig og hyggelig selger for Compend. Compend selger en plattform for kurs og opplæring. Her er litt fersk informasjon om bedriften {firmanavn}: {nyhetstekst} Din oppgave: Skriv en kort åpningsreplikk på maksimalt to setninger som bruker denne informasjonen for å starte en salgssamtale."
+# Her legger vi til bransje som ekstra informasjon
+def lag_ekte_isbryter(firmanavn, nyhetstekst, bransje):
+    instruks = f"Du er en dyktig og hyggelig selger for Compend. Compend selger en plattform for kurs og opplæring. Selskapet {firmanavn} opererer i denne bransjen: '{bransje}'. Nyheter om selskapet: '{nyhetstekst}'. Din oppgave: Skriv en kort åpningsreplikk på maksimalt to setninger for en telefonsamtale. Finn en naturlig vinkel for å selge inn et læringssystem. Hvis nyhetene er tomme, lag replikken utelukkende basert på opplæringsbehov, sertifiseringer eller utfordringer som er helt typiske for bransjen '{bransje}'."
     
     try:
         svar = openai.chat.completions.create(
@@ -70,13 +67,18 @@ if len(st.session_state.mine_leads) > 0:
         nytt_firma = treff["navn"]
         nytt_orgnr = treff["organisasjonsnummer"]
         
+        # Her henter vi ut navnet på bransjen fra Brønnøysundregistrene
+        bransje_navn = treff.get("naeringskode1", {}).get("beskrivelse", "Ukjent bransje")
+        
         with st.container():
             st.subheader(nytt_firma)
             st.write(f"Organisasjonsnummer: {nytt_orgnr}")
+            st.write(f"Bransje: {bransje_navn}")
             
             with st.spinner("Leter etter nyheter og skriver replikk..."):
                 nyheter = finn_nyheter(nytt_firma)
-                replikk = lag_ekte_isbryter(nytt_firma, nyheter)
+                # Vi mater bransjenavnet inn i hjernen sammen med firmanavn og nyheter
+                replikk = lag_ekte_isbryter(nytt_firma, nyheter, bransje_navn)
             
             st.info(f"Forslag til selger: {replikk}")
             
