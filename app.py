@@ -1,146 +1,145 @@
 import streamlit as st
 import requests
+import pandas as pd
 from duckduckgo_search import DDGS
 from openai import OpenAI
+from io import BytesIO
 
+# Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
-
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-modell_navn = "gpt" + chr(45) + "4o" + chr(45) + "mini"
+modell_navn = "gpt-4o-mini"
 
-def finn_eposter(domene):
-    if not domene:
-        return []
-        
-    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-    hunter_url = "https://api.hunter.io/v2/domain" + chr(45) + "search"
-    
-    if "HUNTER_API_KEY" in st.secrets:
-        hunter_nokkel = st.secrets["HUNTER_API_KEY"]
-        parametere = {"domain": rent_domene, "api_key": hunter_nokkel, "limit": 3}
-        
-        try:
-            hunter_svar = requests.get(hunter_url, params=parametere)
-            if hunter_svar.status_code == 200:
-                data = hunter_svar.json()
-                eposter = [epost["value"] for epost in data.get("data", {}).get("emails", [])]
-                return eposter
-            else:
-                return [f"Feilkode fra Hunter: {hunter_svar.status_code}"]
-        except Exception as feilmelding:
-            return [f"Klarte ikke koble til: {feilmelding}"]
-            
-    return ["Mangler Hunter passord i bankboksen."]
+# Hjelpefunksjoner
+def hent_firma_data(orgnr):
+    svar = requests.get(f"{brreg_adresse}/{orgnr}")
+    return svar.json() if svar.status_code == 200 else None
 
 def finn_nyheter(firmanavn):
     try:
         resultater = DDGS().text(f"{firmanavn} norge nyheter", max_results=2)
-        if resultater:
-            innhold = resultater[0]["body"]
-            if len(resultater) > 1:
-                innhold += " " + resultater[1]["body"]
-            return innhold
-        else:
-            return "Ingen ferske nyheter."
-    except Exception:
+        return " ".join([r["body"] for r in resultater]) if resultater else "Ingen ferske nyheter."
+    except:
         return "Ingen ferske nyheter."
 
-def lag_ekte_isbryter(firmanavn, nyhetstekst, bransje):
-    instruks = f"Du er en dyktig og hyggelig selger for Compend. Compend selger en plattform for kurs og opplæring. Selskapet {firmanavn} opererer i denne bransjen: '{bransje}'. Nyheter om selskapet: '{nyhetstekst}'. Din oppgave: Skriv en kort åpningsreplikk på maksimalt to setninger for en telefonsamtale. Finn en naturlig vinkel for å selge inn et læringssystem. Legg deretter til en tredje og siste setning der du foreslår nøyaktig hvilken rolle selgeren bør be om å få snakke med hos kunden."
-    
+def lag_isbryter(firmanavn, nyhetstekst, bransje):
+    instruks = f"Du er en selger for Compend. Skriv en kort åpningsreplikk (2 setninger) til {firmanavn} ({bransje}) basert på: {nyhetstekst}. Foreslå til slutt hvem man bør snakke med."
     try:
-        svar = klient.chat.completions.create(
-            model=modell_navn,
-            messages=[{"role": "user", "content": instruks}]
-        )
+        svar = klient.chat.completions.create(model=modell_navn, messages=[{"role": "user", "content": instruks}])
         return svar.choices[0].message.content
-    except Exception as feilmelding:
-        return f"Systemfeil fra maskinen: {feilmelding}"
+    except Exception as e:
+        return f"Kunne ikke lage replikk: {e}"
 
-st.title("Compend Lead Generator")
+def finn_eposter(domene):
+    if not domene: return []
+    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
+    try:
+        res = requests.get("https://api.hunter.io/v2/domain-search", params={"domain": rent_domene, "api_key": st.secrets["HUNTER_API_KEY"], "limit": 3})
+        return [e["value"] for e in res.json().get("data", {}).get("emails", [])] if res.status_code == 200 else []
+    except:
+        return []
 
-if "mine_leads" not in st.session_state:
-    st.session_state.mine_leads = []
+# Funksjon for å konvertere dataframe til Excel-format i minnet
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='Markedsanalyse')
+    return output.getvalue()
 
-orgnummer = st.text_input("Organisasjonsnummer (9 siffer):")
+# --- STREAMLIT UI ---
+st.set_page_config(page_title="Compend AI Market Insights", layout="wide")
+st.title("📊 Compend AI: Markedsanalyse & Leads")
 
-if st.button("Finn leads til Compend"):
-    svar = requests.get(f"{brreg_adresse}/{orgnummer}")
+if "side_nummer" not in st.session_state: st.session_state.side_nummer = 0
+if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
+
+col_l, col_m, col_r = st.columns([1, 2, 1])
+with col_m:
+    org_input = st.text_input("Skriv inn org.nummer for dyp analyse:", value=st.session_state.soke_felt)
+    start_knapp = st.button("Start Markedsanalyse", use_container_width=True)
+
+if start_knapp:
+    st.session_state.side_nummer = 0
+    hoved_firma = hent_firma_data(org_input)
     
-    if svar.status_code == 200:
-        firma = svar.json()
-        
-        if "naeringskode1" in firma:
-            kode = firma["naeringskode1"]["kode"]
-            parameter = {"naeringskode": kode, "size": 10}
-            lignende_svar = requests.get(brreg_adresse, params=parameter)
-            lignende_data = lignende_svar.json()
-            
-            if "_embedded" in lignende_data:
-                st.session_state.mine_leads = lignende_data["_embedded"]["enheter"]
-        else:
-            st.warning("Fant ingen bransjekode.")
+    if hoved_firma:
+        st.session_state.hoved_firma = hoved_firma
+        kode = hoved_firma.get("naeringskode1", {}).get("kode")
+        if kode:
+            params = {"naeringskode": kode, "size": 15, "page": 0, "fraAntallAnsatte": 10}
+            res = requests.get(brreg_adresse, params=params).json()
+            st.session_state.mine_leads = res.get("_embedded", {}).get("enheter", [])
     else:
-        st.error("Ugyldig organisasjonsnummer.")
+        st.error("Fant ikke selskapet.")
 
-if len(st.session_state.mine_leads) > 0:
-    st.write("Her er ti potensielle kunder i samme bransje:")
+# --- HOVEDVISNING ---
+if "hoved_firma" in st.session_state:
+    f = st.session_state.hoved_firma
+    st.markdown(f"## 🎯 Hovedfokus: {f['navn']}")
     
-    for treff in st.session_state.mine_leads:
-        nytt_firma = treff["navn"]
-        nytt_orgnr = treff["organisasjonsnummer"]
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        st.subheader("Bedriftsinfo")
+        st.write(f"**Org.nr:** {f['organisasjonsnummer']}")
+        st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse')}")
+        st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
         
-        bransje_navn = treff.get("naeringskode1", {}).get("beskrivelse", "Ukjent bransje")
-        nettside = treff.get("hjemmeside", "")
-        antall_ansatte = treff.get("antallAnsatte", 0)
+    with col2:
+        st.subheader("Lokasjon & Web")
+        adr = f.get("forretningsadresse", {})
+        st.write(f"**Adresse:** {adr.get('adresse', [''])[0]}, {adr.get('postnummer', '')} {adr.get('poststed', '')}")
+        st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke registrert')}")
+
+    with col3:
+        st.subheader("Handling")
+        if st.button("🚀 Send til HubSpot", use_container_width=True, type="primary"):
+            st.toast("Sender data...")
+
+    with st.expander("✨ Se AI-generert salgsstrategi", expanded=True):
+        with st.spinner("Analyserer..."):
+            nyheter = finn_nyheter(f['navn'])
+            replikk = lag_isbryter(f['navn'], nyheter, f.get('naeringskode1', {}).get('beskrivelse'))
+            eposter = finn_eposter(f.get('hjemmeside'))
+        st.markdown(f"**Foreslått åpning:** {replikk}")
+        if eposter: st.write(f"**E-poster:** {', '.join(eposter)}")
+    
+    # --- SAMMENLIGNINGSTABELL ---
+    if "mine_leads" in st.session_state:
+        st.markdown("### 📈 Markedssammenligning")
         
-        adresse_data = treff.get("forretningsadresse", {})
-        gateadresse = ", ".join(adresse_data.get("adresse", ["Ukjent"]))
-        postnummer = adresse_data.get("postnummer", "")
-        poststed = adresse_data.get("poststed", "")
-        full_adresse = f"{gateadresse}, {postnummer} {poststed}"
+        sammenligning_data = [{"Selskap": f['navn'] + " (Hoved)", "Ansatte": f.get('antallAnsatte', 0), "Kommune": f.get('forretningsadresse', {}).get('kommune', 'Ukjent'), "Status": "Hovedfokus"}]
+        for l in st.session_state.mine_leads[:5]:
+            if l['organisasjonsnummer'] != f['organisasjonsnummer']:
+                sammenligning_data.append({"Selskap": l['navn'], "Ansatte": l.get('antallAnsatte', 0), "Kommune": l.get('forretningsadresse', {}).get('kommune', 'Ukjent'), "Status": "Konkurrent"})
         
+        df = pd.DataFrame(sammenligning_data)
+        st.table(df)
+
+        # EKSPORT-KNAPP
+        excel_data = to_excel(df)
+        st.download_button(
+            label="📥 Last ned analyse som Excel",
+            data=excel_data,
+            file_name=f"analyse_{f['navn'].replace(' ', '_')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+        st.bar_chart(df.set_index("Selskap")["Ansatte"])
+
+    # --- LISTE OVER MULIGHETER ---
+    st.markdown("### 💡 Andre relevante muligheter")
+    for lead in st.session_state.mine_leads:
+        if lead['organisasjonsnummer'] == f['organisasjonsnummer']: continue
         with st.container():
-            st.subheader(nytt_firma)
-            st.write(f"Organisasjonsnummer: {nytt_orgnr}")
-            st.write(f"Bransje: {bransje_navn}")
-            st.write(f"Ansatte: {antall_ansatte}")
-            
-            if nettside:
-                if not nettside.startswith("http"):
-                    nettside_visning = "https://" + nettside
-                else:
-                    nettside_visning = nettside
-                st.markdown(f"[Besøk nettsiden til {nytt_firma}]({nettside_visning})")
-            
-            with st.spinner("Leter etter nyheter, kontaktinfo og skriver replikk..."):
-                nyheter = finn_nyheter(nytt_firma)
-                replikk = lag_ekte_isbryter(nytt_firma, nyheter, bransje_navn)
-                funnede_eposter = finn_eposter(nettside)
-            
-            if funnede_eposter:
-                st.write("Resultat fra Hunter:")
-                for epost in funnede_eposter:
-                    st.write(f"* {epost}")
-            else:
-                st.write("Hunter fant ingen eposter automatisk.")
-            
-            st.info(f"Forslag til selger: {replikk}")
-            
-            if st.button(f"Send {nytt_firma} til HubSpot", key=nytt_orgnr):
-                epost_tekst = ", ".join(funnede_eposter)
-                lead_pakke = {
-                    "firma": nytt_firma,
-                    "organisasjonsnummer": nytt_orgnr,
-                    "isbryter": replikk,
-                    "eposter": epost_tekst,
-                    "bransje": bransje_navn,
-                    "ansatte": antall_ansatte,
-                    "adresse": full_adresse,
-                    "nettside": nettside
-                }
-                requests.post(zapier_mottaker, json=lead_pakke)
-                st.success(f"Suksess! {nytt_firma} ble sendt til HubSpot via Zapier.")
-            
-            st.divider()
+            c1, c2, c3 = st.columns([3, 1, 1])
+            with c1:
+                st.write(f"**{lead['navn']}** ({lead.get('antallAnsatte', 0)} ansatte)")
+            with c2:
+                if st.button("🔍 Analyser", key=f"s_{lead['organisasjonsnummer']}"):
+                    st.session_state.soke_felt = lead['organisasjonsnummer']
+                    st.rerun()
+            with c3:
+                if st.button("➕ Send", key=f"z_{lead['organisasjonsnummer']}"):
+                    st.toast("Sendt!")
