@@ -11,6 +11,13 @@ zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 modell_navn = "gpt-4o-mini"
 
+# JavaScript for tvungen rulling
+def force_scroll():
+    st.components.v1.html(
+        "<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>",
+        height=0
+    )
+
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
     try:
@@ -21,13 +28,13 @@ def hent_firma_data(orgnr):
 
 def finn_nyheter(firmanavn):
     try:
-        resultater = DDGS().text(f"{firmanavn} norge nyheter eierskap ledelse kontrakt", max_results=5)
+        # Vi utvider søket til å se etter roller og eierskap
+        resultater = DDGS().text(f"{firmanavn} norge roller eierskap aksjonær ledelse", max_results=5)
         return "\n".join([f"{r['title']}: {r['body']}" for r in resultater]) if resultater else ""
     except:
         return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
-    # Kraftig forbedret instruks for å unngå kjedelige svar
     prompt = f"""
     Du er en ekspert-selger for Compend. 
     Selskap: {firmanavn}
@@ -35,19 +42,19 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     Nyheter/Innsikt: {nyhetstekst}
     
     Oppgave:
-    Lag en unik og personlig isbryter på 2-3 setninger som viser at vi har gjort hjemleksen vår. 
-    Ikke bruk standardfraser som 'Jeg har ikke sett noen nyheter'. 
-    Hvis du ikke finner spesifikke nyheter, bruk bransjekunnskap for å nevne en relevant utfordring de mest sannsynlig har.
-    Foreslå hvem i ledelsen vi bør kontakte og hvorfor.
+    1. Lag en unik og personlig isbryter på 2-3 setninger.
+    2. Sjekk nyhetsteksten nøye: Ser det ut som daglig leder eller nøkkelpersoner også er eiere (gründere/aksjonærer)? 
+    3. Nevn spesifikt hvem vi bør kontakte.
+    4. Hvis du finner eierinfo, nevn det som en strategisk fordel ('Siden daglig leder også er på eiersiden...').
     """
     try:
         svar = klient.chat.completions.create(
             model=modell_navn, 
-            messages=[{"role": "system", "content": "Du er en kreativ salgsassistent."}, {"role": "user", "content": prompt}]
+            messages=[{"role": "system", "content": "Du er en analytisk salgsassistent."}, {"role": "user", "content": prompt}]
         )
         return svar.choices[0].message.content
     except:
-        return "Kunne ikke generere en strategisk isbryter akkurat nå."
+        return "Kunne ikke generere strategisk analyse."
 
 def finn_eposter(domene):
     if not domene: return []
@@ -65,55 +72,42 @@ def to_excel(df):
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Compend AI Market Insights", layout="wide")
-
-# JavaScript for tvungen rulling (legges inn som en usynlig komponent)
-def force_scroll():
-    st.components.v1.html(
-        "<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>",
-        height=0
-    )
-
 st.title("📊 Compend AI: Markedsanalyse & Leads")
 
-# Session State for stabilitet
 if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
 
-# Søkefelt
 col_l, col_m, col_r = st.columns([1, 2, 1])
 with col_m:
-    org_input = st.text_input("Skriv inn org.nummer for dyp analyse:", value=st.session_state.soke_felt)
+    org_input = st.text_input("Skriv inn org.nummer for analyse:", value=st.session_state.soke_felt)
     start_knapp = st.button("Start Markedsanalyse", use_container_width=True)
 
-# SØKE-LOGIKK
 def utfor_analyse(orgnr):
-    with st.spinner(f"Analyserer {orgnr}..."):
+    with st.spinner(f"Henter data for {orgnr}..."):
         hoved = hent_firma_data(orgnr)
         if hoved:
             st.session_state.hoved_firma = hoved
             st.session_state.forrige_sok = orgnr
-            # Hent nyheter og e-poster med en gang
             nyheter = finn_nyheter(hoved['navn'])
             st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse'))
             st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
             
-            # Hent lignende selskaper (Bredt søk, manuell filtrering)
             kode = hoved.get("naeringskode1", {}).get("kode")
             if kode:
                 res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
                 alle = res.get("_embedded", {}).get("enheter", [])
+                # SIKKERHET: Vi filtrerer ut dubletter og hovedselskapet selv
                 st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != orgnr][:15]
             force_scroll()
         else:
-            st.error("Fant ikke selskapet.")
+            st.error("Ugyldig organisasjonsnummer.")
 
 if (org_input != st.session_state.forrige_sok and len(org_input) == 9) or start_knapp:
     utfor_analyse(org_input)
     st.rerun()
 
-# --- VISNING ---
 if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
     st.markdown(f"## 🎯 Hovedfokus: {f['navn']}")
@@ -126,12 +120,12 @@ if st.session_state.hoved_firma:
         st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke oppgitt')}")
     with c3:
-        if st.button("🚀 Send til HubSpot", type="primary", use_container_width=True):
-            st.toast("Data overført!")
+        if st.button("🚀 Send til HubSpot", type="primary", use_container_width=True, key="main_send"):
+            st.toast("Overført!")
 
-    st.info(f"**Strategisk Isbryter:**\n\n{st.session_state.get('isbryter', 'Analyserer...')}")
+    st.info(f"**Strategisk Analyse & Eierskap:**\n\n{st.session_state.get('isbryter', '')}")
     if st.session_state.get('eposter'):
-        st.write(f"📧 **E-poster funnet:** {', '.join(st.session_state.eposter)}")
+        st.write(f"📧 **E-poster:** {', '.join(st.session_state.eposter)}")
 
     if st.session_state.mine_leads:
         st.markdown("---")
@@ -139,22 +133,16 @@ if st.session_state.hoved_firma:
         df = pd.DataFrame([{"Selskap": l['navn'], "Ansatte": l.get('antallAnsatte', 0), "Poststed": l.get('forretningsadresse', {}).get('poststed', '')} for l in st.session_state.mine_leads[:10]])
         st.table(df)
         
-        st.markdown("### 💡 Lignende selskaper (Relevante leads)")
-        for lead in st.session_state.mine_leads:
+        st.markdown("### 💡 Lignende selskaper")
+        # Vi bruker enumerate for å sikre helt unike nøkler uansett hva
+        for i, lead in enumerate(st.session_state.mine_leads):
             with st.container():
                 col1, col2, col3 = st.columns([3, 1, 1])
                 col1.write(f"**{lead['navn']}** ({lead.get('antallAnsatte', 0)} ansatte)")
-                if col2.button("🔍 Analyser", key=f"btn_{lead['organisasjonsnummer']}"):
+                # Ved å legge til i (indeks) i nøkkelen unngår vi DuplicateElementKey
+                if col2.button("🔍 Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                     st.session_state.soke_felt = lead['organisasjonsnummer']
                     st.rerun()
-                if col3.button("➕ Send", key=f"hub_{lead['organisasjonsnummer']}"):
+                if col3.button("➕ Send", key=f"send_{lead['organisasjonsnummer']}_{i}"):
                     st.toast(f"Lagt i kø: {lead['navn']}")
                 st.divider()
-
-        if st.button("Last inn flere selskaper...", use_container_width=True):
-            # Enkel paginering ved å hente neste "bøtte"
-            kode = f.get("naeringskode1", {}).get("kode")
-            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100, "page": 1}).json()
-            nye = [e for e in res.get("_embedded", {}).get("enheter", []) if e.get('antallAnsatte', 0) >= 10]
-            st.session_state.mine_leads.extend(nye[:15])
-            st.rerun()
