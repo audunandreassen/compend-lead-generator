@@ -27,22 +27,25 @@ def finn_nyheter(firmanavn):
         return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
+    # Instruks spisset mot Compends leveranse (LMS, kurs, kompetanse)
     prompt = f"""
-    Du er en salgsstrateg for Compend. 
+    Du er en salgsstrateg for Compend (www.compend.no). 
+    Compend leverer plattformer for kurs, opplæring og kompetanseutvikling.
+    
     Selskap: {firmanavn}
     Bransje: {bransje}
     Innsikt: {nyhetstekst}
     
     OPPGAVE:
     Skriv en isbryter på maks 3 korte setninger. 
-    1. Gå rett på sak, ingen hilsener eller "Velkommen til". 
-    2. Nevn en spesifikk utfordring eller mulighet basert på bransje/innsikt.
-    3. Foreslå en konkret tittel å kontakte.
+    1. Gå rett på sak, ingen hilsener. 
+    2. KNYTT innsikten direkte til hvordan Compend kan hjelpe (f.eks. ved vekst trengs rask onboarding, ved sikkerhetskrav trengs kontroll på sertifisering).
+    3. Foreslå en konkret tittel å kontakte (f.eks. HR-ansvarlig eller Operasjonell leder).
     """
     try:
         svar = klient.chat.completions.create(
             model=modell_navn, 
-            messages=[{"role": "system", "content": "Du er en profesjonell salgsrådgiver som hater floskler."}, {"role": "user", "content": prompt}]
+            messages=[{"role": "system", "content": "Du er en profesjonell salgsrådgiver for Compend."}, {"role": "user", "content": prompt}]
         )
         return svar.choices[0].message.content
     except:
@@ -68,9 +71,10 @@ def utfor_analyse(orgnr):
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
-            # Henter 100 selskaper i én operasjon
+            # Henter 100 selskaper i én operasjon for maksimal oversikt
             res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
             alle = res.get("_embedded", {}).get("enheter", [])
+            # Filtrerer bort seg selv, men beholder alle 100 treff fra Brreg
             st.session_state.mine_leads = [e for e in alle if e['organisasjonsnummer'] != orgnr]
     else:
         st.error("Ugyldig organisasjonsnummer.")
@@ -104,12 +108,13 @@ if st.session_state.hoved_firma:
                 "firma": f['navn'],
                 "isbryter": st.session_state.get('isbryter'),
                 "bransje": f.get('naeringskode1', {}).get('beskrivelse'),
-                "ansatte": f.get('antallAnsatte')
+                "ansatte": f.get('antallAnsatte'),
+                "kilde": "Compend Lead Generator"
             }
             requests.post(zapier_mottaker, json=data_pakke)
-            st.success("Sendt!")
+            st.success("Sendt til HubSpot!")
 
-    st.warning(f"**Strategisk innsikt:**\n{st.session_state.get('isbryter')}")
+    st.warning(f"**Compend Salgsstrategi:**\n{st.session_state.get('isbryter')}")
     
     if st.session_state.mine_leads:
         st.markdown("---")
