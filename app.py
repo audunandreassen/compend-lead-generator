@@ -27,7 +27,6 @@ def finn_nyheter(firmanavn):
         return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
-    # Her ber vi om en mye mer nøkternt og profesjonelt svar
     prompt = f"""
     Du er en salgsstrateg for Compend. 
     Selskap: {firmanavn}
@@ -35,27 +34,18 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     Nyhetsinnsikt: {nyhetstekst}
     
     Oppgave:
-    1. Lag en konkret isbryter på 2 setninger. Unngå "Hei [Navn]". Gå rett på sak.
-    2. Hvis nyhetene nevner spesifikke utfordringer eller prosjekter, nevn disse.
-    3. Gi et råd om hvem man bør kontakte. Hvis du ikke har et navn, foreslå en tittel (f.eks. Daglig leder).
-    4. ALDRI gjett på navn eller bruk klammer som [Navn]. Hvis informasjonen mangler, snakk generelt om rollen.
+    1. Lag en konkret isbryter på 2 setninger. Ikke bruk "Hei [Navn]".
+    2. Foreslå en kontaktperson (tittel).
+    3. ALDRI gjett på navn eller bruk klammer som [Navn].
     """
     try:
         svar = klient.chat.completions.create(
             model=modell_navn, 
-            messages=[{"role": "system", "content": "Du er en profesjonell rådgiver som aldri gjetter på data du ikke har."}, {"role": "user", "content": prompt}]
+            messages=[{"role": "system", "content": "Du er en profesjonell rådgiver som aldri gjetter på data."}, {"role": "user", "content": prompt}]
         )
         return svar.choices[0].message.content
     except:
         return "Kunne ikke generere analyse."
-
-def finn_eposter(domene):
-    if not domene: return []
-    rent_domene = domene.replace("https://", "").replace("http://", "").replace("www.", "").split("/")[0]
-    try:
-        res = requests.get("https://api.hunter.io/v2/domain-search", params={"domain": rent_domene, "api_key": st.secrets["HUNTER_API_KEY"], "limit": 3})
-        return [e["value"] for e in res.json().get("data", {}).get("emails", [])] if res.status_code == 200 else []
-    except: return []
 
 def to_excel(df):
     output = BytesIO()
@@ -66,18 +56,14 @@ def to_excel(df):
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Compend Lead-Maskin", layout="wide")
 
-# JavaScript for tvungen rulling som kjøres HVER gang siden tegnes
-st.components.v1.html(
-    "<script>window.parent.document.querySelector('section.main').scrollTo(0, 0);</script>",
-    height=0
-)
-
-st.title("📊 Compend AI: Markedsanalyse")
-
+# Initialiser session state
 if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
+if "side_nummer" not in st.session_state: st.session_state.side_nummer = 0
+
+st.title("📊 Compend AI: Markedsanalyse")
 
 # Søkefelt
 col_l, col_m, col_r = st.columns([1, 2, 1])
@@ -85,29 +71,28 @@ with col_m:
     org_input = st.text_input("Skriv inn org.nummer for analyse:", value=st.session_state.soke_felt)
     start_knapp = st.button("Start Markedsanalyse", use_container_width=True)
 
+# SØKE-LOGIKK (Trigger rulling automatisk ved st.rerun)
 def utfor_analyse(orgnr):
-    with st.spinner(f"Henter fakta om {orgnr}..."):
-        hoved = hent_firma_data(orgnr)
-        if hoved:
-            st.session_state.hoved_firma = hoved
-            st.session_state.forrige_sok = orgnr
-            # Hent innsikt
-            nyheter = finn_nyheter(hoved['navn'])
-            st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent bransje'))
-            st.session_state.eposter = finn_eposter(hoved.get('hjemmeside'))
-            
-            # Hent lignende selskaper
-            kode = hoved.get("naeringskode1", {}).get("kode")
-            if kode:
-                res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
-                alle = res.get("_embedded", {}).get("enheter", [])
-                st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != orgnr][:15]
-        else:
-            st.error("Ugyldig organisasjonsnummer.")
+    st.session_state.side_nummer = 0
+    hoved = hent_firma_data(orgnr)
+    if hoved:
+        st.session_state.hoved_firma = hoved
+        st.session_state.forrige_sok = orgnr
+        nyheter = finn_nyheter(hoved['navn'])
+        st.session_state.isbryter = lag_isbryter(hoved['navn'], nyheter, hoved.get('naeringskode1', {}).get('beskrivelse', 'Ukjent bransje'))
+        
+        kode = hoved.get("naeringskode1", {}).get("kode")
+        if kode:
+            res = requests.get(brreg_adresse, params={"naeringskode": kode, "size": 100}).json()
+            alle = res.get("_embedded", {}).get("enheter", [])
+            st.session_state.mine_leads = [e for e in alle if e.get('antallAnsatte', 0) >= 10 and e['organisasjonsnummer'] != orgnr][:15]
+    else:
+        st.error("Ugyldig organisasjonsnummer.")
 
+# Kjør analyse hvis knappen trykkes eller nytt nummer skrives inn
 if (org_input != st.session_state.forrige_sok and len(org_input) == 9) or start_knapp:
     utfor_analyse(org_input)
-    st.rerun()
+    st.rerun() # Dette sender brukeren til toppen av siden
 
 # --- VISNING ---
 if st.session_state.hoved_firma:
@@ -122,13 +107,10 @@ if st.session_state.hoved_firma:
         st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')}")
     with c3:
-        if st.button("🚀 Send til CRM", type="primary", use_container_width=True, key="main_hub"):
+        if st.button("🚀 Send til CRM", type="primary", use_container_width=True):
             st.toast("Lead sendt!")
 
     st.info(st.session_state.get('isbryter', 'Ingen analyse tilgjengelig.'))
-    
-    if st.session_state.get('eposter'):
-        st.write(f"📧 **Kontaktadresser funnet:** {', '.join(st.session_state.eposter)}")
 
     if st.session_state.mine_leads:
         st.markdown("---")
@@ -147,3 +129,13 @@ if st.session_state.hoved_firma:
                 if col3.button("➕ Send", key=f"zap_{lead['organisasjonsnummer']}_{i}"):
                     st.toast(f"Lagt i kø: {lead['navn']}")
                 st.divider()
+
+        # KNAPPEN ER TILBAKE: Last inn flere selskaper
+        if st.button("Last inn 15 flere selskaper...", use_container_width=True):
+            st.session_state.side_nummer += 1
+            kode = st.session_state.hoved_firma.get("naeringskode1", {}).get("kode")
+            params = {"naeringskode": kode, "size": 100, "page": st.session_state.side_nummer}
+            res = requests.get(brreg_adresse, params=params).json()
+            nye = [e for e in res.get("_embedded", {}).get("enheter", []) if e.get('antallAnsatte', 0) >= 10]
+            st.session_state.mine_leads.extend(nye[:15])
+            st.rerun()
