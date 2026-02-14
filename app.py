@@ -29,7 +29,7 @@ def finn_nyheter(firmanavn):
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
     prompt = f"""
     Du er en salgsstrateg for Compend (www.compend.no). 
-    Compend leverer plattformer for kurs, opplæring og kompetanseutvikling.
+    Compend leverer plattformer for kurs, opplæring og kompetanseutvikling (LMS).
     
     Selskap: {firmanavn}
     Bransje: {bransje}
@@ -38,7 +38,7 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     OPPGAVE:
     Skriv en isbryter på maks 3 korte setninger. 
     1. Gå rett på sak, ingen hilsener. 
-    2. KNYTT innsikten direkte til hvordan Compend kan hjelpe.
+    2. KNYTT innsikten direkte til hvordan Compends løsninger kan hjelpe (f.eks. sikre etterlevelse, raskere onboarding eller sentralisert kursstyring).
     3. Foreslå en konkret tittel å kontakte.
     """
     try:
@@ -110,13 +110,12 @@ if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
     st.divider()
     
-    # HOVEDSELSKAP DETALJER
     st.subheader(f"🎯 Fokusbedrift: {f['navn']}")
     
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
         st.write(f"**Org.nr:** {f['organisasjonsnummer']}")
-        st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
+        st.write(f"**Ansatte:** {f.get('antallAntatte', 'Ukjent')}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')}")
     with c2:
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke oppgitt')}")
@@ -130,8 +129,8 @@ if st.session_state.hoved_firma:
                 "orgnr": f['organisasjonsnummer'],
                 "isbryter": st.session_state.get('isbryter'),
                 "bransje": f.get('naeringskode1', {}).get('beskrivelse'),
-                "ansatte": f.get('antallAnsatte'),
-                "adresse": formater_adresse(f'),
+                "ansatte": f.get('antallAntatte'),
+                "adresse": formater_adresse(f),
                 "nettside": f.get('hjemmeside'),
                 "eposter": ", ".join(st.session_state.get('eposter', []))
             }
@@ -140,16 +139,15 @@ if st.session_state.hoved_firma:
 
     st.warning(f"**Compend Strategi:** {st.session_state.get('isbryter')}")
     
-    # LISTE OVER 100 SELSKAPER
     if st.session_state.mine_leads:
         st.markdown("---")
         st.subheader(f"📈 Relevante selskaper i bransjen ({len(st.session_state.mine_leads)})")
         
-        # Bruker en tabell for rask oversikt over de største
+        # Enkel oversiktstabell
         df_leads = pd.DataFrame([
             {
                 "Selskap": l['navn'],
-                "Ansatte": l.get('antallAnsatte', 0),
+                "Ansatte": l.get('antallAntatte', 0),
                 "Sted": l.get('forretningsadresse', {}).get('poststed', 'Ukjent'),
                 "Nettside": l.get('hjemmeside', '-')
             } for l in st.session_state.mine_leads[:15]
@@ -169,7 +167,6 @@ if st.session_state.hoved_firma:
                         st.session_state.soke_felt = lead['organisasjonsnummer']
                         st.rerun()
                     if st.button("➕ Send HubSpot", key=f"zap_{lead['organisasjonsnummer']}_{i}"):
-                        # Sender enkel info for leads i listen
                         requests.post(zapier_mottaker, json={
                             "firma": lead['navn'], 
                             "orgnr": lead['organisasjonsnummer'],
