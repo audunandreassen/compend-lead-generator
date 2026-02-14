@@ -93,16 +93,26 @@ if len(st.session_state.mine_leads) > 0:
         
         bransje_navn = treff.get("naeringskode1", {}).get("beskrivelse", "Ukjent bransje")
         nettside = treff.get("hjemmeside", "")
+        antall_ansatte = treff.get("antallAnsatte", 0)
+        
+        adresse_data = treff.get("forretningsadresse", {})
+        gateadresse = ", ".join(adresse_data.get("adresse", ["Ukjent"]))
+        postnummer = adresse_data.get("postnummer", "")
+        poststed = adresse_data.get("poststed", "")
+        full_adresse = f"{gateadresse}, {postnummer} {poststed}"
         
         with st.container():
             st.subheader(nytt_firma)
             st.write(f"Organisasjonsnummer: {nytt_orgnr}")
             st.write(f"Bransje: {bransje_navn}")
+            st.write(f"Ansatte: {antall_ansatte}")
             
             if nettside:
                 if not nettside.startswith("http"):
-                    nettside = "https://" + nettside
-                st.markdown(f"[Besøk nettsiden til {nytt_firma}]({nettside})")
+                    nettside_visning = "https://" + nettside
+                else:
+                    nettside_visning = nettside
+                st.markdown(f"[Besøk nettsiden til {nytt_firma}]({nettside_visning})")
             
             with st.spinner("Leter etter nyheter, kontaktinfo og skriver replikk..."):
                 nyheter = finn_nyheter(nytt_firma)
@@ -124,7 +134,11 @@ if len(st.session_state.mine_leads) > 0:
                     "firma": nytt_firma,
                     "organisasjonsnummer": nytt_orgnr,
                     "isbryter": replikk,
-                    "eposter": epost_tekst
+                    "eposter": epost_tekst,
+                    "bransje": bransje_navn,
+                    "ansatte": antall_ansatte,
+                    "adresse": full_adresse,
+                    "nettside": nettside
                 }
                 requests.post(zapier_mottaker, json=lead_pakke)
                 st.success(f"Suksess! {nytt_firma} ble sendt til HubSpot via Zapier.")
