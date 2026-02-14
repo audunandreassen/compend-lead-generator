@@ -27,11 +27,11 @@ def bruk_stil():
             background-color: #FFFFFF;
         }}
         
-        /* Knapper - Farge 368373 med 20px avrunding */
+        /* Knapper - Farge 368373 med 2px avrunding */
         .stButton>button {{
             background-color: #368373;
             color: white;
-            border-radius: 20px;
+            border-radius: 2px;
             border: none;
             padding: 10px 24px;
             transition: 0.2s;
@@ -44,16 +44,16 @@ def bruk_stil():
             border: none;
         }}
 
-        /* Inndatafelt - Hvit bakgrunn og 20px avrunding */
+        /* Inndatafelt - Hvit bakgrunn og 2px avrunding */
         .stTextInput>div>div>input {{
             background-color: #FFFFFF !important;
-            border-radius: 20px;
+            border-radius: 2px;
             border: 1px solid #368373;
             padding: 10px 20px;
             color: #003642;
         }}
 
-        /* Strategisk boks - Fjernet all bakgrunnsfarge */
+        /* Strategisk boks - Rent design uten bakgrunnsfarge */
         .stAlert {{
             background-color: transparent !important;
             border: none !important;
