@@ -145,6 +145,7 @@ if "mine_leads" not in st.session_state: st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state: st.session_state.hoved_firma = None
 if "soke_felt" not in st.session_state: st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state: st.session_state.forrige_sok = ""
+if "scroll_til_topp" not in st.session_state: st.session_state.scroll_til_topp = False
 
 # Søkefelt
 col_l, col_m, col_r = st.columns([1, 2, 1])
@@ -183,6 +184,14 @@ if st.session_state.hoved_firma:
     st.markdown("<hr>", unsafe_allow_html=True)
     
     st.subheader(f.get('navn'))
+
+    if st.session_state.get("scroll_til_topp"):
+        st.components.v1.html("""
+        <script>
+            window.parent.scrollTo({top: 0, behavior: 'smooth'});
+        </script>
+        """, height=0)
+        st.session_state.scroll_til_topp = False
     
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
@@ -224,5 +233,6 @@ if st.session_state.hoved_firma:
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                         st.session_state.soke_felt = lead['organisasjonsnummer']
+                        st.session_state.scroll_til_topp = True
                         st.rerun()
                 st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
