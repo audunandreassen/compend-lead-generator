@@ -27,6 +27,7 @@ def bruk_stil():
             background-color: #FFFFFF;
         }}
         
+        /* Knapper - Farge 368373 med 20px avrunding */
         .stButton>button {{
             background-color: #368373;
             color: white;
@@ -43,21 +44,26 @@ def bruk_stil():
             border: none;
         }}
 
+        /* Inndatafelt - Hvit bakgrunn og 20px avrunding */
         .stTextInput>div>div>input {{
+            background-color: #FFFFFF !important;
             border-radius: 20px;
             border: 1px solid #368373;
             padding: 10px 20px;
+            color: #003642;
         }}
 
+        /* Strategisk boks - Fjernet all bakgrunnsfarge */
         .stAlert {{
-            background-color: transparent;
-            border: none;
-            border-left: 4px solid #003642;
+            background-color: transparent !important;
+            border: none !important;
+            border-left: 4px solid #003642 !important;
             color: #003642;
             border-radius: 0px;
             padding-left: 1.5rem;
         }}
 
+        /* Overskrifter */
         h1, h2, h3 {{
             color: #003642;
             font-weight: 600;
@@ -69,6 +75,7 @@ def bruk_stil():
             opacity: 0.1;
         }}
 
+        /* Avstand fra toppen */
         .block-container {{
             padding-top: 5rem;
         }}
@@ -215,7 +222,6 @@ if st.session_state.hoved_firma:
                     st.write(f"**{lead['navn']}** | {lead.get('antallAntatte', 0)} ansatte")
                     st.write(f"{lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')} | {lead.get('hjemmeside', 'Ingen nettside')}")
                 with col_b:
-                    # HER ER FIKSEN: Fjernet doble krøllparenteser
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                         st.session_state.soke_felt = lead['organisasjonsnummer']
                         st.rerun()
