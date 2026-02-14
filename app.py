@@ -18,13 +18,24 @@ def hent_firma_data(orgnr):
 
 def finn_nyheter(firmanavn):
     try:
-        resultater = DDGS().text(f"{firmanavn} norge nyheter", max_results=2)
+        resultater = DDGS().text(f"{firmanavn} norge nyheter eierskap ledelse", max_results=3)
         return " ".join([r["body"] for r in resultater]) if resultater else "Ingen ferske nyheter."
     except:
         return "Ingen ferske nyheter."
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
-    instruks = f"Du er en selger for Compend. Skriv en kort åpningsreplikk (2 setninger) til {firmanavn} ({bransje}) basert på: {nyhetstekst}. Foreslå til slutt hvem man bør snakke med."
+    # Oppdatert instruks for å også se etter eier-informasjon
+    instruks = f"""
+    Du er en dyktig selger for Compend. 
+    Selskap: {firmanavn}
+    Bransje: {bransje}
+    Info: {nyhetstekst}
+    
+    Oppgave: 
+    1. Skriv en kort åpningsreplikk (2 setninger).
+    2. Nevn spesifikt hvem selgeren bør spørre etter (f.eks. Daglig leder eller HR-direktør).
+    3. Hvis infoen antyder hvem som eier selskapet eller om det er et familieeid selskap, nevn dette kort som et tips til selgeren.
+    """
     try:
         svar = klient.chat.completions.create(model=modell_navn, messages=[{"role": "user", "content": instruks}])
         return svar.choices[0].message.content
@@ -49,8 +60,8 @@ def to_excel(df):
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Compend AI Market Insights", layout="wide")
 
-# 1. Vi legger inn et anker helt øverst på siden
-st.markdown("<div id='top'></div>", unsafe_allow_path=True)
+# Korrigert anker (unsafe_allow_html=True)
+st.markdown("<div id='top'></div>", unsafe_allow_html=True)
 
 st.title("📊 Compend AI: Markedsanalyse & Leads")
 
@@ -65,7 +76,6 @@ with col_m:
     org_input = st.text_input("Skriv inn org.nummer for dyp analyse:", value=st.session_state.soke_felt)
     start_knapp = st.button("Start Markedsanalyse", use_container_width=True)
 
-# FUNKSJON FOR SØK
 def utfor_sok(orgnr):
     st.session_state.side_nummer = 0
     hoved_firma = hent_firma_data(orgnr)
@@ -80,16 +90,13 @@ def utfor_sok(orgnr):
     else:
         st.error("Fant ikke selskapet.")
 
-# Sjekk automatisk søk
+# Automatisk søk og rulling
 if org_input != st.session_state.forrige_sok and len(org_input) == 9:
     utfor_sok(org_input)
-    # 2. Her ber vi siden hoppe til ankeret 'top' når den laster på nytt
-    st.query_params["anchor"] = "top"
     st.rerun()
 
 if start_knapp:
     utfor_sok(org_input)
-    st.query_params["anchor"] = "top"
 
 # --- VISNING ---
 if "hoved_firma" in st.session_state:
@@ -110,29 +117,29 @@ if "hoved_firma" in st.session_state:
     with col3:
         st.subheader("Handling")
         if st.button("🚀 Send til HubSpot", use_container_width=True, type="primary"):
-            st.toast("Sender...")
+            st.toast("Sender til HubSpot...")
 
-    with st.expander("✨ Se AI-generert salgsstrategi", expanded=True):
-        with st.spinner("Analyserer..."):
+    with st.expander("✨ AI-Analyse (Isbryter & Eierskap)", expanded=True):
+        with st.spinner("Analyserer eierskap og nyheter..."):
             nyheter = finn_nyheter(f['navn'])
             replikk = lag_isbryter(f['navn'], nyheter, f.get('naeringskode1', {}).get('beskrivelse'))
             eposter = finn_eposter(f.get('hjemmeside'))
-        st.markdown(f"**Foreslått åpning:** {replikk}")
-        if eposter: st.write(f"**E-poster:** {', '.join(eposter)}")
+        st.markdown(f"**Strategi:** {replikk}")
+        if eposter: st.write(f"**Kontaktinfo funnet:** {', '.join(eposter)}")
     
     if "mine_leads" in st.session_state:
         st.markdown("### 📈 Markedssammenligning")
-        sammenligning_data = [{"Selskap": f['navn'] + " (Hoved)", "Ansatte": f.get('antallAnsatte', 0), "Kommune": f.get('forretningsadresse', {}).get('kommune', 'Ukjent'), "Status": "Hovedfokus"}]
+        sammenligning_data = [{"Selskap": f['navn'] + " (Hoved)", "Ansatte": f.get('antallAnsatte', 0), "Kommune": f.get('forretningsadresse', {}).get('kommune', 'Ukjent')}]
         for l in st.session_state.mine_leads[:5]:
             if l['organisasjonsnummer'] != f['organisasjonsnummer']:
-                sammenligning_data.append({"Selskap": l['navn'], "Ansatte": l.get('antallAnsatte', 0), "Kommune": l.get('forretningsadresse', {}).get('kommune', 'Ukjent'), "Status": "Konkurrent"})
+                sammenligning_data.append({"Selskap": l['navn'], "Ansatte": l.get('antallAnsatte', 0), "Kommune": l.get('forretningsadresse', {}).get('kommune', 'Ukjent')})
         
         df = pd.DataFrame(sammenligning_data)
         st.table(df)
-        st.download_button("📥 Last ned analyse som Excel", data=to_excel(df), file_name=f"analyse_{f['navn']}.xlsx", use_container_width=True)
+        st.download_button("📥 Last ned Excel-rapport", data=to_excel(df), file_name=f"rapport_{f['navn']}.xlsx", use_container_width=True)
         st.bar_chart(df.set_index("Selskap")["Ansatte"])
 
-        st.markdown("### 💡 Andre relevante muligheter")
+        st.markdown("### 💡 Lignende muligheter")
         for lead in st.session_state.mine_leads:
             if lead['organisasjonsnummer'] == f['organisasjonsnummer']: continue
             with st.container():
@@ -145,7 +152,7 @@ if "hoved_firma" in st.session_state:
                         st.rerun()
                 with c3:
                     if st.button("➕ Send", key=f"z_{lead['organisasjonsnummer']}"):
-                        st.toast("Sendt!")
+                        st.toast(f"Sendte {lead['navn']} til Zapier")
                 st.divider()
 
         if st.button("Last inn 15 flere selskaper...", use_container_width=True):
