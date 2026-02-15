@@ -95,8 +95,6 @@ if "soke_felt" not in st.session_state:
     st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
-if "scroll_to_top" not in st.session_state:
-    st.session_state.scroll_to_top = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -192,15 +190,33 @@ def utfor_analyse(orgnr):
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
-            res = requests.get(
-                brreg_adresse, params={"naeringskode": kode, "size": 100}
-            ).json()
+            antall = hoved.get("antallAnsatte") or 0
+            params = {
+                "naeringskode": kode,
+                "sort": "antallAnsatte,desc",
+                "fraAntallAnsatte": 5,
+                "size": 50,
+            }
+            # Filtrer på kommune hvis tilgjengelig
+            kommune = hoved.get("forretningsadresse", {}).get("kommunenummer")
+            if kommune:
+                params["kommunenummer"] = kommune
+
+            res = requests.get(brreg_adresse, params=params).json()
             alle = res.get("_embedded", {}).get("enheter", [])
-            st.session_state.mine_leads = [
-                e for e in alle if e["organisasjonsnummer"] != orgnr
-            ]
-        # Sett flagg for scroll
-        st.session_state.scroll_to_top = True
+            leads = [e for e in alle if e["organisasjonsnummer"] != orgnr]
+
+            # Hvis kommune-søk ga for få resultater, utvid til hele landet
+            if len(leads) < 10 and kommune:
+                del params["kommunenummer"]
+                res2 = requests.get(brreg_adresse, params=params).json()
+                alle2 = res2.get("_embedded", {}).get("enheter", [])
+                eksisterende = {e["organisasjonsnummer"] for e in leads}
+                for e in alle2:
+                    if e["organisasjonsnummer"] != orgnr and e["organisasjonsnummer"] not in eksisterende:
+                        leads.append(e)
+
+            st.session_state.mine_leads = leads
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
@@ -279,32 +295,3 @@ if st.session_state.hoved_firma:
                         st.rerun()
                 st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
-# Nederst i appen: hvis vi nettopp har analysert et nytt selskap, scroll til toppen
-if st.session_state.get("scroll_to_top", False):
-    st.session_state.scroll_to_top = False
-    st.components.v1.html(
-        """
-        <script>
-        function tryScroll() {
-            try {
-                var w = window;
-                while (w !== w.parent) {
-                    try {
-                        w = w.parent;
-                        w.scrollTo(0, 0);
-                        var els = w.document.querySelectorAll(
-                            'section.main, [data-testid="stAppViewContainer"], ' +
-                            '[data-testid="ScrollToBottomContainer"], .main, .stApp'
-                        );
-                        els.forEach(function(el) { el.scrollTop = 0; });
-                    } catch(e) { break; }
-                }
-            } catch(e) {}
-        }
-        tryScroll();
-        setTimeout(tryScroll, 150);
-        setTimeout(tryScroll, 500);
-        </script>
-        """,
-        height=0,
-    )
