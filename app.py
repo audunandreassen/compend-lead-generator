@@ -1,17 +1,17 @@
  (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
 diff --git a/app.py b/app.py
-index ce8f5f4eef1284481284ef28e08de6289bfbeeda..639d76fe8cd7ccf213385ea5e9fe92ebf00c4765 100644
+index ce8f5f4eef1284481284ef28e08de6289bfbeeda..9e2a913cdf9ce00d7b8f6c25814170bc9b842897 100644
 --- a/app.py
 +++ b/app.py
-@@ -1,37 +1,49 @@
+@@ -1,37 +1,47 @@
  import streamlit as st
 +import streamlit.components.v1 as components
  from streamlit_searchbox import st_searchbox
  import requests
- import pandas as pd
+-import pandas as pd
  from duckduckgo_search import DDGS
  from openai import OpenAI
- from io import BytesIO
+-from io import BytesIO
  
  # Konfigurasjon
  brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
@@ -54,7 +54,7 @@ index ce8f5f4eef1284481284ef28e08de6289bfbeeda..639d76fe8cd7ccf213385ea5e9fe92eb
  
          /* --- Knapper --- */
          .stButton>button {
-@@ -256,161 +268,167 @@ def bruk_stil():
+@@ -256,161 +266,167 @@ def bruk_stil():
          }
  
          /* --- Skjul Streamlit-elementer --- */
@@ -227,7 +227,7 @@ index ce8f5f4eef1284481284ef28e08de6289bfbeeda..639d76fe8cd7ccf213385ea5e9fe92eb
                      if e["organisasjonsnummer"] != orgnr and e["organisasjonsnummer"] not in eksisterende:
                          leads.append(e)
  
-@@ -427,51 +445,87 @@ def sok_brreg(soketekst):
+@@ -427,51 +443,87 @@ def sok_brreg(soketekst):
          firma = hent_firma_data(tekst)
          if firma:
              return [(firma.get("navn", "Ukjent") + "  ·  " + tekst, tekst)]
@@ -316,7 +316,7 @@ index ce8f5f4eef1284481284ef28e08de6289bfbeeda..639d76fe8cd7ccf213385ea5e9fe92eb
  
          st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
          col_hub, col_space = st.columns([1, 2])
-@@ -494,29 +548,28 @@ if st.session_state.hoved_firma:
+@@ -494,29 +546,28 @@ if st.session_state.hoved_firma:
      isbryter = st.session_state.get("isbryter")
      if isbryter:
          st.markdown(f"""
