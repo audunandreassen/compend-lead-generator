@@ -1227,11 +1227,170 @@ def oppdater_scorecards_med_ny_data():
 
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
+def installer_analyser_scroll_hook():
+    components.html(
+        """
+        <script>
+            const hentDokument = (ctx) => {
+                try {
+                    return ctx && ctx.document ? ctx.document : null;
+                } catch (_) {
+                    return null;
+                }
+            };
+
+            const hentKontekster = () => {
+                const contexts = [window];
+                try {
+                    if (window.parent && window.parent !== window) {
+                        contexts.push(window.parent);
+                    }
+                } catch (_) {}
+                try {
+                    if (window.top && !contexts.includes(window.top)) {
+                        contexts.push(window.top);
+                    }
+                } catch (_) {}
+                return contexts;
+            };
+
+            const scrollTopNow = () => {
+                hentKontekster().forEach((ctx) => {
+                    try {
+                        ctx.scrollTo(0, 0);
+                    } catch (_) {}
+
+                    const d = hentDokument(ctx);
+                    if (!d) return;
+
+                    [
+                        d.documentElement,
+                        d.body,
+                        d.querySelector('section.main'),
+                        d.querySelector('[data-testid="stAppViewContainer"]'),
+                        d.querySelector('.stAppViewContainer'),
+                        d.querySelector('main'),
+                    ].filter(Boolean).forEach((el) => {
+                        try {
+                            el.scrollTop = 0;
+                        } catch (_) {}
+                        try {
+                            el.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                        } catch (_) {}
+                    });
+                });
+            };
+
+            const parentWindow = (() => {
+                try {
+                    return window.parent || window;
+                } catch (_) {
+                    return window;
+                }
+            })();
+
+            if (parentWindow.__compendAnalyserScrollHookInstalled) {
+                return;
+            }
+            parentWindow.__compendAnalyserScrollHookInstalled = true;
+
+            const bindHooks = () => {
+                const d = hentDokument(parentWindow);
+                if (!d) return;
+
+                d.querySelectorAll('button').forEach((btn) => {
+                    if (btn.dataset.compendScrollHookBound === '1') return;
+                    if (btn.innerText && btn.innerText.trim() === 'Analyser') {
+                        btn.dataset.compendScrollHookBound = '1';
+                        btn.addEventListener('click', () => {
+                            scrollTopNow();
+                            requestAnimationFrame(scrollTopNow);
+                            setTimeout(scrollTopNow, 60);
+                        });
+                    }
+                });
+            };
+
+            bindHooks();
+            const d = hentDokument(parentWindow);
+            if (d && d.body) {
+                const observer = new MutationObserver(bindHooks);
+                observer.observe(d.body, { childList: true, subtree: true });
+            }
+        </script>
+        """,
+        height=0,
+    )
+
 def scroll_til_toppen():
     components.html(
         """
         <script>
-            window.parent.scrollTo({ top: 0, behavior: "smooth" });
+            const hentDokument = (ctx) => {
+                try {
+                    return ctx && ctx.document ? ctx.document : null;
+                } catch (_) {
+                    return null;
+                }
+            };
+
+            const scrollContainersToTop = (ctx) => {
+                if (!ctx) return;
+
+                try {
+                    ctx.scrollTo(0, 0);
+                } catch (_) {}
+
+                const d = hentDokument(ctx);
+                if (!d) return;
+
+                const targets = [
+                    d.documentElement,
+                    d.body,
+                    d.querySelector('section.main'),
+                    d.querySelector('[data-testid="stAppViewContainer"]'),
+                    d.querySelector('.stAppViewContainer'),
+                    d.querySelector('main'),
+                ].filter(Boolean);
+
+                targets.forEach((el) => {
+                    try {
+                        el.scrollTop = 0;
+                    } catch (_) {}
+                    try {
+                        el.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                    } catch (_) {}
+                });
+            };
+
+            const contexts = [window];
+            try {
+                if (window.parent && window.parent !== window) {
+                    contexts.push(window.parent);
+                }
+            } catch (_) {}
+            try {
+                if (window.top && !contexts.includes(window.top)) {
+                    contexts.push(window.top);
+                }
+            } catch (_) {}
+
+            const run = () => {
+                contexts.forEach((ctx) => scrollContainersToTop(ctx));
+            };
+
+            run();
+            requestAnimationFrame(run);
+            setTimeout(run, 60);
+
+            let attempts = 0;
+            const intervalId = setInterval(() => {
+                run();
+                attempts += 1;
+                if (attempts >= 20) {
+                    clearInterval(intervalId);
+                }
+            }, 60);
         </script>
         """,
         height=0,
@@ -1358,7 +1517,10 @@ with col_m:
         key="brreg_sok",
     )
 
+installer_analyser_scroll_hook()
+
 if st.session_state.auto_analyse_orgnr:
+    scroll_til_toppen()
     orgnr = st.session_state.auto_analyse_orgnr
     st.session_state.auto_analyse_orgnr = None
     with st.spinner("Analyserer selskap..."):
@@ -1559,6 +1721,7 @@ if st.session_state.hoved_firma:
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
+                        st.session_state.scroll_topp = True
                         st.session_state.auto_analyse_orgnr = lead["organisasjonsnummer"]
                         if "brreg_sok" in st.session_state:
                             del st.session_state["brreg_sok"]
