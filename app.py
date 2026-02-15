@@ -99,6 +99,63 @@ def hent_datakvalitet_label(score):
         "css_klasse": "datakvalitet-label datakvalitet-label--lav",
     }
 
+
+def vis_vent_modal(varighet_ms=2000):
+    components.html(
+        f"""
+        <script>
+            const modalId = "compend-vent-modal";
+            const styleId = "compend-vent-modal-style";
+            const parentDoc = window.parent.document;
+
+            let style = parentDoc.getElementById(styleId);
+            if (!style) {{
+                style = parentDoc.createElement("style");
+                style.id = styleId;
+                style.textContent = `
+                    #${{modalId}} {{
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0, 54, 66, 0.45);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 99999;
+                    }}
+
+                    #${{modalId}} .compend-vent-innhold {{
+                        background: #ffffff;
+                        color: #003642;
+                        border-radius: 12px;
+                        padding: 1rem 1.6rem;
+                        box-shadow: 0 12px 28px rgba(0, 54, 66, 0.2);
+                        font-family: 'Inter', sans-serif;
+                        font-size: 1rem;
+                        font-weight: 600;
+                        letter-spacing: 0.01em;
+                    }}
+                `;
+                parentDoc.head.appendChild(style);
+            }}
+
+            let modal = parentDoc.getElementById(modalId);
+            if (!modal) {{
+                modal = parentDoc.createElement("div");
+                modal.id = modalId;
+                modal.innerHTML = '<div class="compend-vent-innhold">Vennligst vent</div>';
+                parentDoc.body.appendChild(modal);
+            }}
+
+            modal.style.display = "flex";
+            window.setTimeout(() => {{
+                modal.remove();
+            }}, {varighet_ms});
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
 # --- DESIGN OG STYLING ---
 def bruk_stil():
     st.markdown("""
@@ -450,6 +507,12 @@ if "brreg_detaljer_cache" not in st.session_state:
     st.session_state.brreg_detaljer_cache = {}
 if "brreg_roller_cache" not in st.session_state:
     st.session_state.brreg_roller_cache = {}
+if "vis_vent_modal" not in st.session_state:
+    st.session_state.vis_vent_modal = False
+
+if st.session_state.vis_vent_modal:
+    vis_vent_modal()
+    st.session_state.vis_vent_modal = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -1630,6 +1693,7 @@ if st.session_state.hoved_firma:
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
                         st.session_state.scroll_topp = True
                         st.session_state.auto_analyse_orgnr = lead["organisasjonsnummer"]
+                        st.session_state.vis_vent_modal = True
                         if "brreg_sok" in st.session_state:
                             del st.session_state["brreg_sok"]
                         st.rerun()
