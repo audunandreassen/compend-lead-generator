@@ -1617,7 +1617,7 @@ if st.session_state.hoved_firma:
         with col_h_dk:
             st.markdown(f"""
             <div class="score-kort">
-                <div class="score-title">Datakvalitet (hovedselskap)</div>
+                <div class="score-title">Datakvalitet</div>
                 <div class="score-value">{hovedscore['datakvalitet']}/100</div>
                 <ul>
                     <li>{hovedscore['datakvalitet_grunner'][0]}</li>
