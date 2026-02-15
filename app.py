@@ -460,12 +460,20 @@ def sok_brreg(soketekst):
 # Søkefelt
 col_l, col_m, col_r = st.columns([1, 3, 1])
 with col_m:
-    valgt = st_searchbox(
-        sok_brreg,
-        placeholder="Selskapsnavn eller organisasjonsnummer",
-        clear_on_submit=True,
-        key="brreg_sok",
-    )
+    soketekst = st.text_input("Selskapsnavn eller organisasjonsnummer", key="brreg_soketekst")
+    valg_liste = sok_brreg(soketekst)
+    valgt = None
+    if valg_liste:
+        label_til_orgnr = {label: orgnr for label, orgnr in valg_liste}
+        valgt_label = st.selectbox(
+            "Velg selskap",
+            options=list(label_til_orgnr.keys()),
+            index=None,
+            placeholder="Velg selskap fra trefflisten",
+            label_visibility="collapsed",
+        )
+        if valgt_label:
+            valgt = label_til_orgnr[valgt_label]
 
 run_analysis_param = st.query_params.get("run_analysis") == "1"
 query_orgnr = st.query_params.get("orgnr")
@@ -507,6 +515,38 @@ elif valgt and valgt != st.session_state.siste_sok_valg and not run_analysis_par
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(valgt)
     st.session_state.siste_sok_valg = valgt
+    st.rerun()
+
+run_analysis_param = st.query_params.get("run_analysis") == "1"
+query_orgnr = st.query_params.get("orgnr")
+
+if st.session_state.scroll_then_analyze and st.session_state.pending_scroll_orgnr and not run_analysis_param:
+    pending_orgnr = st.session_state.pending_scroll_orgnr
+    components.html(
+        f"""
+        <script>
+            window.parent?.scrollTo({{ top: 0, behavior: 'smooth' }});
+            window.scrollTo({{ top: 0, behavior: 'smooth' }});
+            setTimeout(() => {{
+                const url = new URL(window.location.href);
+                url.searchParams.set('run_analysis', '1');
+                url.searchParams.set('orgnr', '{pending_orgnr}');
+                window.location.href = url.toString();
+            }}, 350);
+        </script>
+        """,
+        height=0,
+    )
+    st.stop()
+
+if run_analysis_param:
+    orgnr = query_orgnr or st.session_state.pending_scroll_orgnr
+    st.query_params.clear()
+    st.session_state.pending_scroll_orgnr = None
+    st.session_state.scroll_then_analyze = False
+    if orgnr:
+        with st.spinner("Analyserer..."):
+            utfor_analyse(orgnr)
     st.rerun()
 
 # --- VISNING ---
