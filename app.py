@@ -864,18 +864,21 @@ def normaliser_nettside_kilde(kilde):
     }
     return mapping.get(verdi, "unknown")
 
-def lag_isbryter(firmanavn, nyhetstekst, bransje):
+def lag_isbryter(firmanavn, nyhetstekst, bransje, bht_plikt):
     prompt = f"""
     Du er en salgsstrateg for Compend (www.compend.no). 
-    Compend leverer plattformer for kurs, opplæring og kompetanseutvikling (LMS).
+    Compend leverer plattformer for kurs, opplæring og kompetanseutvikling (LMS), med et bredt kursutvalg på tvers av fagområder.
     Selskap: {firmanavn}
     Bransje: {bransje}
+    BHT-plikt (SN2007): {bht_plikt}
     Innsikt: {nyhetstekst}
     OPPGAVE:
-    Skriv en analyse på maks 3 korte setninger som selgeren kan bruke. 
+    Skriv en tung, handlingsorientert analyse på 4-6 setninger for hovedselskapet.
     1. Ingen hilsener eller emojier. 
-    2. KNYTT innsikten direkte til Compends løsninger.
-    3. Foreslå en konkret tittel å kontakte.
+    2. KNYTT innsikten direkte til Compends totale kursutvalg og LMS-løsning.
+    3. Vurder særlig behov for BHT- og HMS-relatert opplæring når selskapet er BHT-pliktig (og forklar hvorfor).
+    4. Hvis selskapet ikke er BHT-pliktig, foreslå likevel relevante kursområder med tydelig forretningsverdi.
+    5. Foreslå en konkret tittel å kontakte og hvorfor akkurat denne rollen.
     """
     try:
         svar = klient.chat.completions.create(
@@ -1272,6 +1275,7 @@ def utfor_analyse(orgnr):
             firmanavn,
             nyheter,
             hoved.get("naeringskode1", {}).get("beskrivelse", "Ukjent"),
+            bht_svar_for_firma(hoved),
         )
         st.session_state.eposter = finn_eposter(hoved.get("hjemmeside"))
         st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
@@ -1420,8 +1424,6 @@ if st.session_state.hoved_firma:
                     {isbryter}
                 </div>
             """, unsafe_allow_html=True)
-
-        st.info("Scorecards vurderes automatisk på nytt med oppdatert datagrunnlag.")
 
         hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
