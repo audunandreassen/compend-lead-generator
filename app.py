@@ -400,21 +400,45 @@ def finn_daglig_leder(orgnr):
         or []
     )
 
+    def normaliser_navnverdi(verdi):
+        if isinstance(verdi, dict):
+            fulltnavn = verdi.get("fulltNavn") or verdi.get("fulltnavn") or verdi.get("navn")
+            if fulltnavn:
+                return str(fulltnavn).strip()
+
+            navnedeler = [
+                verdi.get("fornavn"),
+                verdi.get("mellomnavn"),
+                verdi.get("etternavn"),
+            ]
+            sammensatt = " ".join(str(delnavn).strip() for delnavn in navnedeler if delnavn)
+            return sammensatt.strip()
+
+        if isinstance(verdi, (list, tuple, set)):
+            sammensatt = " ".join(normaliser_navnverdi(delverdi) for delverdi in verdi)
+            return sammensatt.strip()
+
+        if verdi is None:
+            return ""
+
+        return str(verdi).strip()
+
     def hent_personnavn(rolle):
         if not isinstance(rolle, dict):
             return ""
 
         person = rolle.get("person") or rolle.get("rolleinnehaver") or {}
         if isinstance(person, dict):
-            return (
+            navn = (
                 person.get("navn")
                 or person.get("fulltNavn")
                 or person.get("fulltnavn")
-                or ""
+                or person
             )
+            return normaliser_navnverdi(navn)
 
         if isinstance(person, str):
-            return person
+            return person.strip()
         return ""
 
     def rolle_er_daglig_leder(element):
