@@ -479,30 +479,35 @@ if valgt and valgt != st.session_state.siste_sok_valg:
     st.rerun()
 
 run_analysis_param = st.query_params.get("run_analysis") == "1"
+query_orgnr = st.query_params.get("orgnr")
 
 if st.session_state.scroll_then_analyze and st.session_state.pending_scroll_orgnr and not run_analysis_param:
+    pending_orgnr = st.session_state.pending_scroll_orgnr
     components.html(
-        """
+        f"""
         <script>
-            window.parent.scrollTo({ top: 0, behavior: 'smooth' });
-            setTimeout(() => {
-                const url = new URL(window.parent.location.href);
+            window.parent?.scrollTo({{ top: 0, behavior: 'smooth' }});
+            window.scrollTo({{ top: 0, behavior: 'smooth' }});
+            setTimeout(() => {{
+                const url = new URL(window.location.href);
                 url.searchParams.set('run_analysis', '1');
-                window.parent.location.href = url.toString();
-            }, 350);
+                url.searchParams.set('orgnr', '{pending_orgnr}');
+                window.location.href = url.toString();
+            }}, 350);
         </script>
         """,
         height=0,
     )
     st.stop()
 
-if st.session_state.pending_scroll_orgnr and run_analysis_param:
+if run_analysis_param:
+    orgnr = query_orgnr or st.session_state.pending_scroll_orgnr
     st.query_params.clear()
-    orgnr = st.session_state.pending_scroll_orgnr
     st.session_state.pending_scroll_orgnr = None
     st.session_state.scroll_then_analyze = False
-    with st.spinner("Analyserer..."):
-        utfor_analyse(orgnr)
+    if orgnr:
+        with st.spinner("Analyserer..."):
+            utfor_analyse(orgnr)
     st.rerun()
 
 # --- VISNING ---
