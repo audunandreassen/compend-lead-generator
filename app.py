@@ -332,6 +332,8 @@ if "scroll_topp" not in st.session_state:
     st.session_state.scroll_topp = False
 if "nettside_kilde" not in st.session_state:
     st.session_state.nettside_kilde = ""
+if "nettside_url" not in st.session_state:
+    st.session_state.nettside_url = ""
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -412,6 +414,60 @@ def finn_nettside_for_firma(firmanavn):
             return verifisert
     return ""
 
+def finn_nettside_fallback(firma, orgnr, poststed):
+    if not firma:
+        return ""
+
+    blokkerte_domener = {
+        "facebook.com", "instagram.com", "linkedin.com", "proff.no", "purehelp.no",
+        "wikipedia.org", "gulesider.no", "1881.no", "brreg.no", "enhetsregisteret.no",
+    }
+
+    firmanavn_ord = [ord for ord in firma.lower().replace("-", " ").split() if len(ord) > 2]
+    poststed_lav = (poststed or "").lower()
+    orgnr_tekst = str(orgnr or "")
+
+    try:
+        resultater = DDGS().text(f"{firma} orgnr {orgnr} offisiell nettside", max_results=12)
+    except:
+        return ""
+
+    kandidater = []
+    for resultat in resultater or []:
+        href = resultat.get("href", "")
+        domene = normaliser_nettside_url(href)
+        if not domene:
+            continue
+        if any(domene == blokkert or domene.endswith(f".{blokkert}") for blokkert in blokkerte_domener):
+            continue
+
+        snippet = f"{resultat.get('title', '')} {resultat.get('body', '')}".lower()
+        score = 0
+
+        # Heuristikk: firmanavn i domene
+        if any(ord in domene for ord in firmanavn_ord):
+            score += 3
+
+        # Heuristikk: norsk TLD
+        if domene.endswith(".no"):
+            score += 2
+
+        # Heuristikk: samsvar i snippets
+        if orgnr_tekst and orgnr_tekst in snippet:
+            score += 3
+        if poststed_lav and poststed_lav in snippet:
+            score += 1
+        if any(ord in snippet for ord in firmanavn_ord):
+            score += 1
+
+        kandidater.append((score, domene))
+
+    for _, domene in sorted(kandidater, key=lambda x: x[0], reverse=True):
+        verifisert = verifiser_nettside(domene)
+        if verifisert:
+            return verifisert
+    return ""
+
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
     prompt = f"""
     Du er en salgsstrateg for Compend (www.compend.no). 
@@ -443,9 +499,16 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     except:
         return "Kunne ikke generere analyse."
 
-def finn_eposter(domene):
+def finn_eposter(domene=None, nettside_kilde=None):
+    domene = domene if domene is not None else st.session_state.get("nettside_url", "")
+    nettside_kilde = nettside_kilde if nettside_kilde is not None else st.session_state.get("nettside_kilde", "")
     if not domene:
         return []
+
+    # Utnytt kun kilder vi eksplisitt stoler på.
+    if nettside_kilde not in {"brreg", "fallback"}:
+        return []
+
     rent_domene = (
         domene.replace("https://", "")
         .replace("http://", "")
@@ -542,7 +605,9 @@ def bygg_leadscore(lead, hoved_firma):
 
 def bygg_hovedscore(hoved_firma, leads):
     ansatte = hoved_firma.get("antallAnsatte") or 0
-    nettside = bool(hoved_firma.get("hjemmeside"))
+    nettside_url = st.session_state.get("nettside_url") or hoved_firma.get("hjemmeside") or ""
+    nettside_kilde = st.session_state.get("nettside_kilde", "")
+    nettside = bool(nettside_url)
     epostdekning = len(st.session_state.get("eposter", []))
     adresse = hoved_firma.get("forretningsadresse", {})
     har_full_adresse = bool(adresse.get("adresse") and adresse.get("postnummer") and adresse.get("poststed"))
@@ -566,7 +631,7 @@ def bygg_hovedscore(hoved_firma, leads):
     if ansatte >= 50:
         passformscore += 10
     if nettside:
-        passformscore += 10
+        passformscore += 10 if nettside_kilde == "brreg" else 7
     if har_full_adresse:
         passformscore += 5
     if epostdekning >= 2:
@@ -583,7 +648,7 @@ def bygg_hovedscore(hoved_firma, leads):
     if sammenlignbare >= 10:
         intentscore += 10
     if nettside and epostdekning > 0:
-        intentscore += 10
+        intentscore += 10 if nettside_kilde == "brreg" else 7
     intentscore = max(0, min(100, intentscore))
 
     return {
@@ -591,7 +656,7 @@ def bygg_hovedscore(hoved_firma, leads):
         "intentscore": intentscore,
         "passform_grunner": [
             f"Størrelse i kjernesegment: {ansatte} ansatte.",
-            "Digitalt fundament på plass med egen nettside." if nettside else "Manglende nettside reduserer skalerbar aktivering.",
+            f"Digitalt fundament på plass med egen nettside ({nettside_kilde})." if nettside else "Manglende nettside reduserer skalerbar aktivering.",
             f"Kontaktbarhet: {epostdekning} identifiserte e-postadresser.",
             "Tydelig registrert forretningsadresse gir høy datakvalitet." if har_full_adresse else "Ufullstendig adresseinformasjon svekker datakvalitet.",
             f"{sammenlignbare} sammenlignbare selskaper i samme bransjekode gir god benchmark.",
@@ -599,7 +664,7 @@ def bygg_hovedscore(hoved_firma, leads):
         "intent_grunner": [
             f"{storre_enn_hoved} lignende selskaper er like store eller større – indikerer moden markedsdynamikk.",
             f"{lokal_klynge} relevante aktører i samme kommune øker sannsynlighet for lokal konkurranse om kompetanse.",
-            "Nettside + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging.",
+            f"Nettside ({nettside_kilde}) + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging.",
             "Bransjebredden i lead-settet gir signal om vedvarende opplæringsbehov i segmentet.",
             "Samlet vurdering: timing er gunstig for proaktiv kompetansedialog med beslutningstagere.",
         ],
@@ -625,11 +690,17 @@ def utfor_analyse(orgnr):
         registrert_nettside = verifiser_nettside(hoved.get("hjemmeside", ""))
         if registrert_nettside:
             hoved["hjemmeside"] = registrert_nettside
-            st.session_state.nettside_kilde = "Brreg"
+            st.session_state.nettside_url = registrert_nettside
+            st.session_state.nettside_kilde = "brreg"
         else:
-            funnet_nettside = finn_nettside_for_firma(firmanavn)
+            funnet_nettside = finn_nettside_fallback(
+                firmanavn,
+                orgnr,
+                hoved.get("forretningsadresse", {}).get("poststed", ""),
+            )
             hoved["hjemmeside"] = funnet_nettside
-            st.session_state.nettside_kilde = "Automatisk funnet" if funnet_nettside else "Ikke funnet"
+            st.session_state.nettside_url = funnet_nettside
+            st.session_state.nettside_kilde = "fallback" if funnet_nettside else ""
 
         nyheter = finn_nyheter(firmanavn)
         st.session_state.isbryter = lag_isbryter(
@@ -637,7 +708,7 @@ def utfor_analyse(orgnr):
             nyheter,
             hoved.get("naeringskode1", {}).get("beskrivelse", "Ukjent"),
         )
-        st.session_state.eposter = finn_eposter(hoved.get("hjemmeside"))
+        st.session_state.eposter = finn_eposter(st.session_state.nettside_url, st.session_state.nettside_kilde)
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
@@ -728,10 +799,10 @@ if st.session_state.hoved_firma:
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
     nettside_kilde = st.session_state.get("nettside_kilde", "")
-    nettside = f.get("hjemmeside", "")
+    nettside = st.session_state.get("nettside_url") or f.get("hjemmeside", "")
     nettside_visning = nettside if nettside else "Ikke oppgitt"
-    if nettside and nettside_kilde == "Automatisk funnet":
-        nettside_visning = f"{nettside} (automatisk funnet)"
+    if nettside and nettside_kilde == "fallback":
+        nettside_visning = f"{nettside} (fallback)"
 
     with st.container(border=True):
         st.markdown(f"""<h2 style="margin-top:0; margin-bottom:0.3rem; font-size:1.3rem;">{f.get("navn", "Ukjent")}</h2>
