@@ -725,7 +725,7 @@ def bygg_kontaktinfo_html(firma):
     if kontakt.get("mobil"):
         deler.append(f"Mobil: {html.escape(kontakt['mobil'])}")
     if kontakt.get("epost"):
-        deler.append(f"E-post: {html.escape(kontakt['epost'])}")
+        deler.append(f"E-post: {lag_epost_lenke(kontakt['epost'])}")
     return " &middot; ".join(deler) if deler else "Ikke oppgitt"
 
 def finn_nyheter(firmanavn):
@@ -1034,6 +1034,52 @@ def lag_url_lenke(url, etikett=None):
     href = url_tekst if url_tekst.startswith(("http://", "https://")) else f"https://{url_tekst}"
     visning = etikett or url_tekst
     return f'<a href="{html.escape(href, quote=True)}" target="_blank" rel="noopener noreferrer">{html.escape(visning)}</a>'
+
+
+def lag_epost_lenke(epost, etikett=None):
+    if not epost:
+        return ""
+
+    epost_tekst = epost.strip()
+    if not epost_tekst:
+        return ""
+
+    visning = etikett or epost_tekst
+    return f'<a href="mailto:{html.escape(epost_tekst, quote=True)}">{html.escape(visning)}</a>'
+
+
+def bygg_tilknyttede_kontakter_for_hubspot(firma, eposter=None):
+    eposter = eposter or []
+    kontaktinfo = firma.get("kontaktinfo") or hent_kontaktinfo_fra_firma(firma)
+
+    alle_eposter = list(
+        dict.fromkeys(
+            [
+                epost.strip()
+                for epost in [*eposter, kontaktinfo.get("epost", "")]
+                if epost and epost.strip()
+            ]
+        )
+    )
+
+    tilknyttede_kontakter = [
+        {
+            "rolle": "Kontakt",
+            "epost": epost,
+        }
+        for epost in alle_eposter
+    ]
+
+    daglig_leder = (firma.get("daglig_leder") or "").strip()
+    if daglig_leder and daglig_leder != "Ikke oppgitt":
+        tilknyttede_kontakter.append(
+            {
+                "rolle": "Daglig leder",
+                "navn": daglig_leder,
+            }
+        )
+
+    return tilknyttede_kontakter
 
 def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
     eposter = eposter or []
@@ -1539,7 +1585,11 @@ if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
     bransje = f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')
     eposter = st.session_state.get("eposter", [])
-    epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
+    epost_html = (
+        f'<div class="detalj"><strong>E-post</strong> {", ".join(lag_epost_lenke(epost) for epost in eposter)}</div>'
+        if eposter
+        else ""
+    )
     daglig_leder = f.get("daglig_leder") or "Ikke oppgitt"
     hoved_bht_svar = bht_svar_for_firma(f)
     kontaktinfo_html = bygg_kontaktinfo_html(f)
@@ -1633,6 +1683,7 @@ if st.session_state.hoved_firma:
         col_hub, col_space = st.columns([1, 2])
         with col_hub:
             if st.button("Send til HubSpot", use_container_width=True):
+                tilknyttede_kontakter = bygg_tilknyttede_kontakter_for_hubspot(f, eposter)
                 data_pakke = {
                     "firma": f.get("navn", "Ukjent"),
                     "organisasjonsnummer": f.get("organisasjonsnummer", ""),
@@ -1642,6 +1693,8 @@ if st.session_state.hoved_firma:
                     "adresse": formater_adresse(f),
                     "nettside": f.get("hjemmeside"),
                     "eposter": ", ".join(eposter),
+                    "daglig_leder": f.get("daglig_leder", ""),
+                    "tilknyttede_kontakter": tilknyttede_kontakter,
                 }
                 requests.post(zapier_mottaker, json=data_pakke)
                 st.success("Sendt til HubSpot")
