@@ -346,6 +346,10 @@ if "nettside_validering_cache" not in st.session_state:
     st.session_state.nettside_validering_cache = {}
 if "hoved_nettside_validering" not in st.session_state:
     st.session_state.hoved_nettside_validering = None
+if "brreg_detaljer_cache" not in st.session_state:
+    st.session_state.brreg_detaljer_cache = {}
+if "brreg_roller_cache" not in st.session_state:
+    st.session_state.brreg_roller_cache = {}
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -363,6 +367,101 @@ def sok_firma_navn(navn):
     except:
         pass
     return []
+
+def hent_brreg_detaljer(orgnr):
+    cache = st.session_state.setdefault("brreg_detaljer_cache", {})
+    if not orgnr:
+        return None
+    if orgnr not in cache:
+        cache[orgnr] = hent_firma_data(orgnr)
+    return cache.get(orgnr)
+
+def hent_brreg_roller(orgnr):
+    cache = st.session_state.setdefault("brreg_roller_cache", {})
+    if not orgnr:
+        return {}
+    if orgnr in cache:
+        return cache[orgnr]
+
+    try:
+        svar = requests.get(f"{brreg_adresse}/{orgnr}/roller", timeout=5)
+        cache[orgnr] = svar.json() if svar.status_code == 200 else {}
+    except:
+        cache[orgnr] = {}
+    return cache[orgnr]
+
+def finn_daglig_leder(orgnr):
+    roller_data = hent_brreg_roller(orgnr)
+    rollegrupper = roller_data.get("rollegrupper") or []
+
+    for gruppe in rollegrupper:
+        beskrivelse = (gruppe.get("type") or "") + " " + (gruppe.get("beskrivelse") or "")
+        if "daglig" not in beskrivelse.lower():
+            continue
+
+        for rolle in gruppe.get("roller", []):
+            person = rolle.get("person", {})
+            navn = person.get("navn")
+            if navn:
+                return navn
+    return "Ikke oppgitt"
+
+def hent_kontaktinfo_fra_firma(firma):
+    if not firma:
+        return {}
+
+    kontakt = firma.get("kontaktinformasjon", {})
+    epost = (
+        kontakt.get("epostadresse")
+        or firma.get("epostadresse")
+        or ""
+    )
+    telefon = (
+        kontakt.get("telefon")
+        or kontakt.get("telefonnummer")
+        or firma.get("telefon")
+        or firma.get("telefonnummer")
+        or ""
+    )
+    mobil = (
+        kontakt.get("mobil")
+        or kontakt.get("mobilnummer")
+        or firma.get("mobil")
+        or firma.get("mobilnummer")
+        or ""
+    )
+    return {
+        "epost": str(epost).strip(),
+        "telefon": str(telefon).strip(),
+        "mobil": str(mobil).strip(),
+    }
+
+def berik_firma_med_kontaktinfo(firma):
+    if not firma:
+        return firma
+
+    orgnr = firma.get("organisasjonsnummer")
+    detaljer = hent_brreg_detaljer(orgnr) or {}
+    kontakt = hent_kontaktinfo_fra_firma(detaljer)
+    for felt in ("epostadresse", "telefon", "telefonnummer", "mobil", "mobilnummer"):
+        verdi = detaljer.get(felt)
+        if verdi and not firma.get(felt):
+            firma[felt] = verdi
+
+    firma["daglig_leder"] = finn_daglig_leder(orgnr)
+    firma["kontaktinfo"] = kontakt
+    return firma
+
+def bygg_kontaktinfo_html(firma):
+    kontakt = firma.get("kontaktinfo") or hent_kontaktinfo_fra_firma(firma)
+    deler = []
+    if kontakt.get("telefon"):
+        deler.append(f"Telefon: {html.escape(kontakt['telefon'])}")
+    if kontakt.get("mobil"):
+        deler.append(f"Mobil: {html.escape(kontakt['mobil'])}")
+    if kontakt.get("epost"):
+        deler.append(f"E-post: {html.escape(kontakt['epost'])}")
+    return " &middot; ".join(deler) if deler else "Ikke oppgitt"
 
 def finn_nyheter(firmanavn):
     try:
@@ -908,6 +1007,7 @@ def scroll_til_toppen():
 def utfor_analyse(orgnr):
     hoved = hent_firma_data(orgnr)
     if hoved:
+        hoved = berik_firma_med_kontaktinfo(hoved)
         st.session_state.hoved_firma = hoved
         st.session_state.forrige_sok = orgnr
         firmanavn = hoved.get("navn", "Ukjent")
@@ -974,7 +1074,11 @@ def utfor_analyse(orgnr):
                     if e["organisasjonsnummer"] != orgnr and e["organisasjonsnummer"] not in eksisterende:
                         leads.append(e)
 
-            st.session_state.mine_leads = leads
+            berikede_leads = []
+            for lead in leads:
+                berikede_leads.append(berik_firma_med_kontaktinfo(lead))
+
+            st.session_state.mine_leads = berikede_leads
             for lead in st.session_state.mine_leads:
                 nettside = lead.get("hjemmeside") or ""
                 if not nettside:
@@ -1042,6 +1146,8 @@ if st.session_state.hoved_firma:
     bransje = f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
+    daglig_leder = f.get("daglig_leder") or "Ikke oppgitt"
+    kontaktinfo_html = bygg_kontaktinfo_html(f)
     nettside_kilde = st.session_state.get("nettside_kilde", "")
     nettside_kilde_normalisert = normaliser_nettside_kilde(nettside_kilde)
     nettside_kilde_etikett = NETTSIDE_KILDE_ETIKETTER.get(
@@ -1065,6 +1171,8 @@ if st.session_state.hoved_firma:
     <div class="detalj"><strong>Nettside</strong> {nettside_visning}</div>
     <div class="detalj"><strong>Nettsidevalidering</strong> {valideringsstatus}</div>
     <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
+    <div class="detalj"><strong>Daglig leder</strong> {html.escape(daglig_leder)}</div>
+    <div class="detalj"><strong>Kontaktinfo</strong> {kontaktinfo_html}</div>
     {epost_html}
 </div>""", unsafe_allow_html=True)
 
@@ -1150,11 +1258,15 @@ if st.session_state.hoved_firma:
             nettside = lead.get('hjemmeside', '')
             ansatte = lead.get('antallAnsatte', 0)
             nettside_tekst = f" &middot; {lag_url_lenke(nettside)}" if nettside else ""
+            daglig_leder = lead.get("daglig_leder") or "Ikke oppgitt"
+            kontaktinfo = bygg_kontaktinfo_html(lead)
 
             with st.container(border=True):
                 st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
 <span class="lead-ansatte">{ansatte} ansatte</span>
-<div class="lead-info">{poststed}{nettside_tekst}</div>""", unsafe_allow_html=True)
+<div class="lead-info">{poststed}{nettside_tekst}</div>
+<div class="lead-info"><strong>Daglig leder:</strong> {html.escape(daglig_leder)}</div>
+<div class="lead-info"><strong>Kontaktinfo:</strong> {kontaktinfo}</div>""", unsafe_allow_html=True)
 
                 scoredata = bygg_leadscore(lead, st.session_state.hoved_firma)
                 hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
