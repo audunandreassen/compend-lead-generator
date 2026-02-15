@@ -24,6 +24,32 @@ NETTSIDE_KILDE_ETIKETTER = {
     "unknown": "Ukjent",
 }
 
+BHT_PLIKTIGE_SN2007_KODER = {
+    "02", "03.2", "03.3", "05", "07", "08", "09.9", "10", "11", "12", "13", "14", "15", "16", "17", "18.1", "19", "20", "21", "22", "23", "24", "25", "26.1", "26.2", "26.3", "26.4", "26.51", "26.6", "26.7", "27", "28", "29", "30", "31", "32.3", "32.4", "32.5", "32.990", "33", "35.1", "35.21", "35.22", "35.23", "35.3", "35.4", "36", "37", "38", "39", "41", "42", "43.1", "43.2", "43.3", "43.4", "43.5", "43.9", "46.87", "49", "52.21", "52.22", "52.23", "52.24", "53.1", "53.2", "55.1", "56.11", "56.22", "56.3", "61", "75", "77.1", "80.01", "80.09", "81.2", "84.23", "84.24", "84.25", "85.1", "85.2", "85.3", "85.4", "85.5", "85.69", "86.1", "86.2", "86.91", "86.92", "86.93", "86.94", "86.95", "86.96", "86.99", "87.1", "87.2", "87.3", "87.99", "88", "91.3", "95.23", "95.24", "95.29", "95.31", "95.32", "96.1", "96.21", "96.91",
+}
+
+
+def normaliser_naeringskode(naeringskode):
+    if not naeringskode:
+        return ""
+    return "".join(ch for ch in str(naeringskode).strip() if ch.isdigit() or ch == ".")
+
+
+def er_underlagt_bht(naeringskode):
+    kode = normaliser_naeringskode(naeringskode)
+    if not kode:
+        return False
+
+    for bht_kode in BHT_PLIKTIGE_SN2007_KODER:
+        if kode == bht_kode or kode.startswith(f"{bht_kode}."):
+            return True
+    return False
+
+
+def bht_svar_for_firma(firma):
+    kode = (firma or {}).get("naeringskode1", {}).get("kode")
+    return "Ja" if er_underlagt_bht(kode) else "Nei"
+
 # --- DESIGN OG STYLING ---
 def bruk_stil():
     st.markdown("""
@@ -1228,6 +1254,7 @@ if st.session_state.hoved_firma:
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
     daglig_leder = f.get("daglig_leder") or "Ikke oppgitt"
+    hoved_bht_svar = bht_svar_for_firma(f)
     kontaktinfo_html = bygg_kontaktinfo_html(f)
     nettside_kilde = st.session_state.get("nettside_kilde", "")
     nettside_kilde_normalisert = normaliser_nettside_kilde(nettside_kilde)
@@ -1254,6 +1281,7 @@ if st.session_state.hoved_firma:
     <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
     <div class="detalj"><strong>Daglig leder</strong> {html.escape(daglig_leder)}</div>
     <div class="detalj"><strong>Kontaktinfo</strong> {kontaktinfo_html}</div>
+    <div class="detalj"><strong>BHT-plikt (SN2007)</strong> {hoved_bht_svar}</div>
     {epost_html}
 </div>""", unsafe_allow_html=True)
 
@@ -1341,13 +1369,15 @@ if st.session_state.hoved_firma:
             nettside_tekst = f" &middot; {lag_url_lenke(nettside)}" if nettside else ""
             daglig_leder = lead.get("daglig_leder") or "Ikke oppgitt"
             kontaktinfo = bygg_kontaktinfo_html(lead)
+            lead_bht_svar = bht_svar_for_firma(lead)
 
             with st.container(border=True):
                 st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
 <span class="lead-ansatte">{ansatte} ansatte</span>
 <div class="lead-info">{poststed}{nettside_tekst}</div>
 <div class="lead-info"><strong>Daglig leder:</strong> {html.escape(daglig_leder)}</div>
-<div class="lead-info"><strong>Kontaktinfo:</strong> {kontaktinfo}</div>""", unsafe_allow_html=True)
+<div class="lead-info"><strong>Kontaktinfo:</strong> {kontaktinfo}</div>
+<div class="lead-info"><strong>BHT-plikt (SN2007):</strong> {lead_bht_svar}</div>""", unsafe_allow_html=True)
 
                 scoredata = bygg_leadscore(lead, st.session_state.hoved_firma)
                 hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
