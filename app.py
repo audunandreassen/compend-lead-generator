@@ -50,6 +50,23 @@ def bht_svar_for_firma(firma):
     kode = (firma or {}).get("naeringskode1", {}).get("kode")
     return "Ja" if er_underlagt_bht(kode) else "Nei"
 
+
+def hent_datakvalitet_label(score):
+    if score >= 75:
+        return {
+            "tekst": "god datakvalitet",
+            "css_klasse": "datakvalitet-label datakvalitet-label--god",
+        }
+    if score >= 50:
+        return {
+            "tekst": "ok datakvalitet",
+            "css_klasse": "datakvalitet-label datakvalitet-label--ok",
+        }
+    return {
+        "tekst": "lav datakvalitet",
+        "css_klasse": "datakvalitet-label datakvalitet-label--lav",
+    }
+
 # --- DESIGN OG STYLING ---
 def bruk_stil():
     st.markdown("""
@@ -224,6 +241,30 @@ def bruk_stil():
             font-size: 0.75rem;
             font-weight: 500;
             margin-left: 8px;
+        }
+
+        .datakvalitet-label {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .datakvalitet-label--lav {
+            background: #fdecec;
+            color: #b42318;
+        }
+
+        .datakvalitet-label--ok {
+            background: #fff6e5;
+            color: #b54708;
+        }
+
+        .datakvalitet-label--god {
+            background: #ecfdf3;
+            color: #027a48;
         }
 
         .lead-why-now {
@@ -1271,11 +1312,13 @@ if st.session_state.hoved_firma:
     valideringsstatus = valideringsstatus_tekst(hoved_validering.get("status"))
 
     with st.container(border=True):
+        hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
+        hoved_dk_label = hent_datakvalitet_label(hovedscore["datakvalitet"])
         st.markdown(f"""<h2 style="margin-top:0; margin-bottom:0.3rem; font-size:1.3rem;">{f.get("navn", "Ukjent")}</h2>
 <span class="firma-badge">{bransje}</span>
 <div class="firma-detaljer">
     <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
-    <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
+    <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')} <span class="{hoved_dk_label['css_klasse']}">{hoved_dk_label['tekst']}</span></div>
     <div class="detalj"><strong>Nettside</strong> {nettside_visning}</div>
     <div class="detalj"><strong>Nettsidevalidering</strong> {valideringsstatus}</div>
     <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
@@ -1294,7 +1337,6 @@ if st.session_state.hoved_firma:
                 </div>
             """, unsafe_allow_html=True)
 
-        hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_h_pf, col_h_int, col_h_dk = st.columns(3)
         with col_h_pf:
@@ -1339,9 +1381,6 @@ if st.session_state.hoved_firma:
             </div>
             """, unsafe_allow_html=True)
 
-        if hovedscore["hoy_usikkerhet"]:
-            st.warning("Lav datakvalitet: scorevurderingen har høy usikkerhet. Verifiser nøkkelfelter før prioritering.")
-
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_hub, col_space = st.columns([1, 2])
         with col_hub:
@@ -1372,15 +1411,17 @@ if st.session_state.hoved_firma:
             lead_bht_svar = bht_svar_for_firma(lead)
 
             with st.container(border=True):
+                scoredata = bygg_leadscore(lead, st.session_state.hoved_firma)
+                datakvalitet_label = hent_datakvalitet_label(scoredata["datakvalitet"])
+                hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
                 st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
 <span class="lead-ansatte">{ansatte} ansatte</span>
+<span class="{datakvalitet_label['css_klasse']}">{datakvalitet_label['tekst']}</span>
 <div class="lead-info">{poststed}{nettside_tekst}</div>
 <div class="lead-info"><strong>Daglig leder:</strong> {html.escape(daglig_leder)}</div>
 <div class="lead-info"><strong>Kontaktinfo:</strong> {kontaktinfo}</div>
 <div class="lead-info"><strong>BHT-plikt (SN2007):</strong> {lead_bht_svar}</div>""", unsafe_allow_html=True)
 
-                scoredata = bygg_leadscore(lead, st.session_state.hoved_firma)
-                hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
                 st.markdown(f"""<div class="lead-why-now">{hvorfor_na_html}</div>""", unsafe_allow_html=True)
 
                 col_pf, col_int, col_dk = st.columns(3)
@@ -1421,10 +1462,6 @@ if st.session_state.hoved_firma:
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
-
-                if scoredata["hoy_usikkerhet"]:
-                    st.markdown('<div style="margin-top: 1rem;"></div>', unsafe_allow_html=True)
-                    st.warning("Lav datakvalitet: denne leadscoren har høy usikkerhet.")
 
                 st.markdown('<div style="margin-top: 0.9rem;"></div>', unsafe_allow_html=True)
                 col_a, col_b = st.columns([3, 1])
