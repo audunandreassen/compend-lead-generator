@@ -421,6 +421,7 @@ bruk_stil()
 
 # Header
 st.markdown("""
+    <div id="compend-top" style="height:0;margin:0;padding:0;"></div>
     <div class="app-header">
         <h1>Compend Insights</h1>
         <p>Finn, analyser og kvalifiser nye leads</p>
@@ -1228,66 +1229,38 @@ def oppdater_scorecards_med_ny_data():
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
-    # Use components.html with height=2 (height=0 may prevent iframe from rendering).
-    # Brute-force approach: find ANY element with scrollTop > 0 and reset it,
-    # plus a MutationObserver to keep scrolling after Streamlit's own scroll
-    # restoration fires.
-    components.html(
-        """
-        <script>
-        (function() {
-            var p, doc;
-            try { p = window.parent; doc = p.document; } catch(e) {
-                try { p = window.top; doc = p.document; } catch(e2) { return; }
-            }
-            if (!doc || !doc.body) return;
-
-            function scrollKnown() {
-                var sels = [
-                    '[data-testid="stAppViewContainer"]',
-                    '[data-testid="stMain"]',
-                    '[data-testid="stMainBlockContainer"]',
-                    '[data-testid="stVerticalBlock"]',
-                    'section.main',
-                    '.main',
-                    'main',
-                    '.stApp'
-                ];
-                for (var s = 0; s < sels.length; s++) {
-                    var el = doc.querySelector(sels[s]);
-                    if (el) { el.scrollTop = 0; }
-                }
-                doc.body.scrollTop = 0;
-                doc.documentElement.scrollTop = 0;
-                try { p.scrollTo(0, 0); } catch(e) {}
-            }
-
-            function scrollBruteForce() {
-                scrollKnown();
-                var all = doc.querySelectorAll('*');
-                for (var i = 0; i < all.length; i++) {
-                    try { if (all[i].scrollTop > 0) all[i].scrollTop = 0; } catch(e) {}
-                }
-            }
-
-            scrollBruteForce();
-
-            var end = Date.now() + 3000;
-            var obs = new MutationObserver(function() {
-                if (Date.now() < end) { scrollKnown(); }
-                else { obs.disconnect(); }
-            });
-            obs.observe(doc.body, {childList: true, subtree: true});
-
-            var delays = [50, 100, 200, 400, 700, 1000, 1500, 2000, 2500, 3000];
-            for (var d = 0; d < delays.length; d++) {
-                setTimeout(scrollBruteForce, delays[d]);
-            }
-            setTimeout(function() { obs.disconnect(); }, 3500);
-        })();
-        </script>
-        """,
-        height=2,
+    # Use a raw <iframe srcdoc> via st.markdown instead of components.html.
+    # components.html adds sandbox="allow-scripts" (without allow-same-origin),
+    # which blocks access to window.parent.document.
+    # A raw srcdoc iframe inherits the parent's origin without sandbox restrictions.
+    js_code = (
+        "(function(){"
+        "var doc;"
+        "try{doc=window.parent.document}catch(e){return}"
+        "function s(){"
+        "var anchor=doc.getElementById('compend-top');"
+        "if(anchor){anchor.scrollIntoView({behavior:'instant',block:'start'})}"
+        "var a=doc.querySelectorAll('*');"
+        "for(var i=0;i<a.length;i++){try{if(a[i].scrollTop>0)a[i].scrollTop=0}catch(e){}}"
+        "try{window.parent.scrollTo(0,0)}catch(e){}"
+        "}"
+        "s();"
+        "var end=Date.now()+3000;"
+        "var obs=new MutationObserver(function(){if(Date.now()<end){s()}else{obs.disconnect()}});"
+        "obs.observe(doc.body,{childList:true,subtree:true});"
+        "var d=[50,150,300,600,1000,1500,2000,2500,3000];"
+        "for(var j=0;j<d.length;j++){setTimeout(s,d[j])}"
+        "setTimeout(function(){obs.disconnect()},3500)"
+        "})()"
+    )
+    srcdoc_content = f"<html><body><script>{js_code}</script></body></html>"
+    escaped_srcdoc = html.escape(srcdoc_content, quote=True)
+    ts = id(object())
+    st.markdown(
+        f'<iframe srcdoc="{escaped_srcdoc}" '
+        f'style="width:0;height:0;border:0;position:absolute;left:-9999px;" '
+        f'data-t="{ts}"></iframe>',
+        unsafe_allow_html=True,
     )
 
 def utfor_analyse(orgnr):
