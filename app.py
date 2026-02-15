@@ -1161,6 +1161,7 @@ if st.session_state.hoved_firma:
                     """, unsafe_allow_html=True)
 
                 if scoredata["hoy_usikkerhet"]:
+                    st.markdown('<div style="margin-top: 1rem;"></div>', unsafe_allow_html=True)
                     st.warning("Lav datakvalitet: denne leadscoren har høy usikkerhet.")
 
                 st.markdown('<div style="margin-top: 0.9rem;"></div>', unsafe_allow_html=True)
