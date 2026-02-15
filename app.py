@@ -475,6 +475,25 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def finn_nettside_status(firma):
+    status = firma.get("nettside_status")
+    if status in {"confirmed", "inferred", "missing", "invalid"}:
+        return status
+
+    nettside = firma.get("hjemmeside") or ""
+    if not nettside:
+        return "missing"
+    return "inferred" if normaliser_nettside_url(nettside) else "invalid"
+
+def nettside_status_tekst(status):
+    tekster = {
+        "confirmed": "Nettsiden er verifisert og tilgjengelig.",
+        "inferred": "Nettsiden er antatt gyldig, men ikke eksplisitt verifisert.",
+        "missing": "Nettside er ukjent eller ikke oppgitt.",
+        "invalid": "Oppgitt nettside ser ugyldig ut eller svarer ikke.",
+    }
+    return tekster.get(status, tekster["missing"])
+
 def bygg_leadscore(lead, hoved_firma):
     lead_ansatte = lead.get("antallAnsatte") or 0
     hoved_ansatte = hoved_firma.get("antallAnsatte") or 0
@@ -487,7 +506,7 @@ def bygg_leadscore(lead, hoved_firma):
     hoved_kommune = hoved_firma.get("forretningsadresse", {}).get("kommunenummer")
     samme_kommune = bool(lead_kommune and lead_kommune == hoved_kommune)
 
-    nettside = lead.get("hjemmeside") or ""
+    nettside_status = finn_nettside_status(lead)
 
     # Passformscore: hvor godt leadet matcher hovedselskapet i størrelse og segment
     passformscore = 35
@@ -497,8 +516,10 @@ def bygg_leadscore(lead, hoved_firma):
         passformscore += 15
     if abs(lead_ansatte - hoved_ansatte) <= 50:
         passformscore += 10
-    if nettside:
+    if nettside_status in {"confirmed", "inferred"}:
         passformscore += 5
+    elif nettside_status == "invalid":
+        passformscore -= 3
     passformscore = max(0, min(100, passformscore))
 
     # Intentscore: sannsynlighet for at timing er riktig
@@ -509,8 +530,10 @@ def bygg_leadscore(lead, hoved_firma):
         intentscore += 10
     if samme_kommune:
         intentscore += 15
-    if nettside:
+    if nettside_status in {"confirmed", "inferred"}:
         intentscore += 10
+    elif nettside_status == "invalid":
+        intentscore -= 4
     if lead_ansatte > hoved_ansatte:
         intentscore += 10
     intentscore = max(0, min(100, intentscore))
@@ -530,19 +553,19 @@ def bygg_leadscore(lead, hoved_firma):
         "passform_grunner": [
             bransjetekst,
             f"Størrelse: {lead_ansatte} ansatte",
-            "Egen nettside gjør aktivering enklere" if nettside else "Manglende nettside trekker litt ned",
+            nettside_status_tekst(nettside_status),
         ],
         "intent_grunner": [
             "Vekstindikator: over 50 ansatte" if lead_ansatte >= 50 else "Modent nok selskap for strukturert læring",
             geotekst,
-            "Har digital tilstedeværelse" if nettside else "Begrenset digital tilstedeværelse",
+            nettside_status_tekst(nettside_status),
         ],
         "hvorfor_na": hvorfor_na,
     }
 
 def bygg_hovedscore(hoved_firma, leads):
     ansatte = hoved_firma.get("antallAnsatte") or 0
-    nettside = bool(hoved_firma.get("hjemmeside"))
+    nettside_status = finn_nettside_status(hoved_firma)
     epostdekning = len(st.session_state.get("eposter", []))
     adresse = hoved_firma.get("forretningsadresse", {})
     har_full_adresse = bool(adresse.get("adresse") and adresse.get("postnummer") and adresse.get("poststed"))
@@ -565,8 +588,10 @@ def bygg_hovedscore(hoved_firma, leads):
         passformscore += 15
     if ansatte >= 50:
         passformscore += 10
-    if nettside:
+    if nettside_status in {"confirmed", "inferred"}:
         passformscore += 10
+    elif nettside_status == "invalid":
+        passformscore -= 4
     if har_full_adresse:
         passformscore += 5
     if epostdekning >= 2:
@@ -582,8 +607,10 @@ def bygg_hovedscore(hoved_firma, leads):
         intentscore += 10
     if sammenlignbare >= 10:
         intentscore += 10
-    if nettside and epostdekning > 0:
+    if nettside_status in {"confirmed", "inferred"} and epostdekning > 0:
         intentscore += 10
+    elif nettside_status == "invalid":
+        intentscore -= 3
     intentscore = max(0, min(100, intentscore))
 
     return {
@@ -591,7 +618,7 @@ def bygg_hovedscore(hoved_firma, leads):
         "intentscore": intentscore,
         "passform_grunner": [
             f"Størrelse i kjernesegment: {ansatte} ansatte.",
-            "Digitalt fundament på plass med egen nettside." if nettside else "Manglende nettside reduserer skalerbar aktivering.",
+            nettside_status_tekst(nettside_status),
             f"Kontaktbarhet: {epostdekning} identifiserte e-postadresser.",
             "Tydelig registrert forretningsadresse gir høy datakvalitet." if har_full_adresse else "Ufullstendig adresseinformasjon svekker datakvalitet.",
             f"{sammenlignbare} sammenlignbare selskaper i samme bransjekode gir god benchmark.",
@@ -599,7 +626,7 @@ def bygg_hovedscore(hoved_firma, leads):
         "intent_grunner": [
             f"{storre_enn_hoved} lignende selskaper er like store eller større – indikerer moden markedsdynamikk.",
             f"{lokal_klynge} relevante aktører i samme kommune øker sannsynlighet for lokal konkurranse om kompetanse.",
-            "Nettside + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging.",
+            nettside_status_tekst(nettside_status),
             "Bransjebredden i lead-settet gir signal om vedvarende opplæringsbehov i segmentet.",
             "Samlet vurdering: timing er gunstig for proaktiv kompetansedialog med beslutningstagere.",
         ],
@@ -622,14 +649,24 @@ def utfor_analyse(orgnr):
         st.session_state.forrige_sok = orgnr
         firmanavn = hoved.get("navn", "Ukjent")
 
-        registrert_nettside = verifiser_nettside(hoved.get("hjemmeside", ""))
+        registrert_hjemmeside = hoved.get("hjemmeside", "")
+        registrert_nettside = verifiser_nettside(registrert_hjemmeside)
         if registrert_nettside:
             hoved["hjemmeside"] = registrert_nettside
+            hoved["nettside_status"] = "confirmed"
             st.session_state.nettside_kilde = "Brreg"
         else:
             funnet_nettside = finn_nettside_for_firma(firmanavn)
             hoved["hjemmeside"] = funnet_nettside
-            st.session_state.nettside_kilde = "Automatisk funnet" if funnet_nettside else "Ikke funnet"
+            if funnet_nettside:
+                hoved["nettside_status"] = "inferred"
+                st.session_state.nettside_kilde = "Automatisk funnet"
+            elif registrert_hjemmeside:
+                hoved["nettside_status"] = "invalid"
+                st.session_state.nettside_kilde = "Ugyldig"
+            else:
+                hoved["nettside_status"] = "missing"
+                st.session_state.nettside_kilde = "Ikke funnet"
 
         nyheter = finn_nyheter(firmanavn)
         st.session_state.isbryter = lag_isbryter(
@@ -668,6 +705,14 @@ def utfor_analyse(orgnr):
                         leads.append(e)
 
             st.session_state.mine_leads = leads
+            for lead in st.session_state.mine_leads:
+                nettside = lead.get("hjemmeside") or ""
+                if not nettside:
+                    lead["nettside_status"] = "missing"
+                elif normaliser_nettside_url(nettside):
+                    lead["nettside_status"] = "inferred"
+                else:
+                    lead["nettside_status"] = "invalid"
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
