@@ -284,7 +284,22 @@ if st.session_state.get("scroll_to_top", False):
     st.components.v1.html(
         """
         <script>
-        window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'instant'});
+        const doc = window.parent.document;
+        // Prøv ulike Streamlit-selektorer for scroll-container
+        const selectors = [
+            'section.main',
+            '[data-testid="stAppViewContainer"]',
+            '.main',
+            '.block-container',
+        ];
+        for (const sel of selectors) {
+            const el = doc.querySelector(sel);
+            if (el) {
+                el.scrollTop = 0;
+            }
+        }
+        // Fallback: scroll hele vinduet
+        window.parent.scrollTo(0, 0);
         </script>
         """,
         height=0,
