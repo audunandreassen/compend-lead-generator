@@ -6,7 +6,7 @@ import pandas as pd
 from duckduckgo_search import DDGS
 from openai import OpenAI
 from io import BytesIO
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 # Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
@@ -332,8 +332,10 @@ if "scroll_topp" not in st.session_state:
     st.session_state.scroll_topp = False
 if "nettside_kilde" not in st.session_state:
     st.session_state.nettside_kilde = ""
-if "nettside_url" not in st.session_state:
-    st.session_state.nettside_url = ""
+if "nettside_validering_cache" not in st.session_state:
+    st.session_state.nettside_validering_cache = {}
+if "hoved_nettside_validering" not in st.session_state:
+    st.session_state.hoved_nettside_validering = None
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -373,18 +375,98 @@ def normaliser_nettside_url(url):
         return ""
     return host
 
-def verifiser_nettside(url):
-    domene = normaliser_nettside_url(url)
-    if not domene:
+def normaliser_url_for_validering(url):
+    if not url:
         return ""
 
-    for kandidat in (f"https://{domene}", f"http://{domene}"):
-        try:
-            svar = requests.get(kandidat, timeout=4, allow_redirects=True)
-            if svar.status_code < 400:
-                return kandidat
-        except:
-            continue
+    kandidat = url.strip()
+    if not kandidat:
+        return ""
+
+    if not kandidat.startswith(("http://", "https://")):
+        kandidat = f"https://{kandidat}"
+
+    parsed = urlparse(kandidat)
+    if not parsed.netloc or "." not in parsed.netloc:
+        return ""
+
+    scheme = parsed.scheme.lower() if parsed.scheme else "https"
+    netloc = parsed.netloc.lower()
+    path = parsed.path if parsed.path else ""
+    return urlunparse((scheme, netloc, path, "", "", ""))
+
+def valider_nettside(url):
+    normalisert_url = normaliser_url_for_validering(url)
+    if not normalisert_url:
+        return {
+            "input_url": url,
+            "normalized_url": "",
+            "final_url": "",
+            "http_status": None,
+            "status": "inactive",
+            "error": "Ugyldig eller manglende URL",
+        }
+
+    def klassifiser_svar(svar):
+        slutt_url = getattr(svar, "url", normalisert_url)
+        redirectet = bool(getattr(svar, "history", []))
+        if 200 <= svar.status_code < 400:
+            status = "redirected" if redirectet else "active"
+        else:
+            status = "inactive"
+        return {
+            "input_url": url,
+            "normalized_url": normalisert_url,
+            "final_url": slutt_url,
+            "http_status": svar.status_code,
+            "status": status,
+            "error": "",
+        }
+
+    try:
+        head_svar = requests.head(normalisert_url, timeout=3, allow_redirects=True)
+        if head_svar.status_code not in (405, 501):
+            return klassifiser_svar(head_svar)
+    except requests.RequestException:
+        pass
+
+    try:
+        get_svar = requests.get(normalisert_url, timeout=3, allow_redirects=True)
+        return klassifiser_svar(get_svar)
+    except requests.RequestException as e:
+        return {
+            "input_url": url,
+            "normalized_url": normalisert_url,
+            "final_url": "",
+            "http_status": None,
+            "status": "error",
+            "error": str(e),
+        }
+
+def hent_validering_fra_cache(url):
+    cache = st.session_state.setdefault("nettside_validering_cache", {})
+    nokkel = (url or "").strip()
+    if nokkel not in cache:
+        cache[nokkel] = valider_nettside(nokkel)
+    return cache[nokkel]
+
+def valideringsstatus_tekst(status):
+    visning = {
+        "active": "Aktiv",
+        "redirected": "Videresendt",
+        "inactive": "Inaktiv",
+        "error": "Feil",
+    }
+    return visning.get(status, "Ukjent")
+
+def verifiser_nettside(url):
+    normalisert = normaliser_url_for_validering(url)
+    if not normalisert:
+        return ""
+
+    validering = valider_nettside(normalisert)
+    if validering["status"] in ("active", "redirected"):
+        return validering["final_url"] or validering["normalized_url"]
     return ""
 
 def finn_nettside_for_firma(firmanavn):
@@ -538,6 +620,25 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def finn_nettside_status(firma):
+    status = firma.get("nettside_status")
+    if status in {"confirmed", "inferred", "missing", "invalid"}:
+        return status
+
+    nettside = firma.get("hjemmeside") or ""
+    if not nettside:
+        return "missing"
+    return "inferred" if normaliser_nettside_url(nettside) else "invalid"
+
+def nettside_status_tekst(status):
+    tekster = {
+        "confirmed": "Nettsiden er verifisert og tilgjengelig.",
+        "inferred": "Nettsiden er antatt gyldig, men ikke eksplisitt verifisert.",
+        "missing": "Nettside er ukjent eller ikke oppgitt.",
+        "invalid": "Oppgitt nettside ser ugyldig ut eller svarer ikke.",
+    }
+    return tekster.get(status, tekster["missing"])
+
 def bygg_leadscore(lead, hoved_firma):
     lead_ansatte = lead.get("antallAnsatte") or 0
     hoved_ansatte = hoved_firma.get("antallAnsatte") or 0
@@ -551,6 +652,9 @@ def bygg_leadscore(lead, hoved_firma):
     samme_kommune = bool(lead_kommune and lead_kommune == hoved_kommune)
 
     nettside = lead.get("hjemmeside") or ""
+    nettside_validering = hent_validering_fra_cache(nettside)
+    nettside_status = nettside_validering.get("status")
+    nettside_ok = nettside_status in ("active", "redirected")
 
     # Passformscore: hvor godt leadet matcher hovedselskapet i størrelse og segment
     passformscore = 35
@@ -560,8 +664,10 @@ def bygg_leadscore(lead, hoved_firma):
         passformscore += 15
     if abs(lead_ansatte - hoved_ansatte) <= 50:
         passformscore += 10
-    if nettside:
+    if nettside_ok:
         passformscore += 5
+    elif nettside_status in ("inactive", "error"):
+        passformscore -= 3
     passformscore = max(0, min(100, passformscore))
 
     # Intentscore: sannsynlighet for at timing er riktig
@@ -572,8 +678,10 @@ def bygg_leadscore(lead, hoved_firma):
         intentscore += 10
     if samme_kommune:
         intentscore += 15
-    if nettside:
+    if nettside_ok:
         intentscore += 10
+    elif nettside_status in ("inactive", "error"):
+        intentscore -= 5
     if lead_ansatte > hoved_ansatte:
         intentscore += 10
     intentscore = max(0, min(100, intentscore))
@@ -593,25 +701,26 @@ def bygg_leadscore(lead, hoved_firma):
         "passform_grunner": [
             bransjetekst,
             f"Størrelse: {lead_ansatte} ansatte",
-            "Egen nettside gjør aktivering enklere" if nettside else "Manglende nettside trekker litt ned",
+            f"Nettsidevalidering: {valideringsstatus_tekst(nettside_status)}",
         ],
         "intent_grunner": [
             "Vekstindikator: over 50 ansatte" if lead_ansatte >= 50 else "Modent nok selskap for strukturert læring",
             geotekst,
-            "Har digital tilstedeværelse" if nettside else "Begrenset digital tilstedeværelse",
+            "Digital tilstedeværelse er verifisert" if nettside_ok else "Digital tilstedeværelse er usikker",
         ],
         "hvorfor_na": hvorfor_na,
+        "nettside_validering": nettside_validering,
     }
 
 def bygg_hovedscore(hoved_firma, leads):
     ansatte = hoved_firma.get("antallAnsatte") or 0
-    nettside_url = st.session_state.get("nettside_url") or hoved_firma.get("hjemmeside") or ""
-    nettside_kilde = st.session_state.get("nettside_kilde", "")
-    nettside = bool(nettside_url)
     epostdekning = len(st.session_state.get("eposter", []))
     adresse = hoved_firma.get("forretningsadresse", {})
     har_full_adresse = bool(adresse.get("adresse") and adresse.get("postnummer") and adresse.get("poststed"))
     bransjekode = hoved_firma.get("naeringskode1", {}).get("kode")
+    nettside_validering = st.session_state.get("hoved_nettside_validering") or hent_validering_fra_cache(hoved_firma.get("hjemmeside", ""))
+    nettside_status = nettside_validering.get("status")
+    nettside_ok = nettside_status in ("active", "redirected")
 
     sammenlignbare = 0
     storre_enn_hoved = 0
@@ -630,8 +739,10 @@ def bygg_hovedscore(hoved_firma, leads):
         passformscore += 15
     if ansatte >= 50:
         passformscore += 10
-    if nettside:
-        passformscore += 10 if nettside_kilde == "brreg" else 7
+    if nettside_ok:
+        passformscore += 10
+    elif nettside_status in ("inactive", "error"):
+        passformscore -= 5
     if har_full_adresse:
         passformscore += 5
     if epostdekning >= 2:
@@ -647,8 +758,10 @@ def bygg_hovedscore(hoved_firma, leads):
         intentscore += 10
     if sammenlignbare >= 10:
         intentscore += 10
-    if nettside and epostdekning > 0:
-        intentscore += 10 if nettside_kilde == "brreg" else 7
+    if nettside_ok and epostdekning > 0:
+        intentscore += 10
+    elif nettside_status in ("inactive", "error"):
+        intentscore -= 5
     intentscore = max(0, min(100, intentscore))
 
     return {
@@ -656,7 +769,7 @@ def bygg_hovedscore(hoved_firma, leads):
         "intentscore": intentscore,
         "passform_grunner": [
             f"Størrelse i kjernesegment: {ansatte} ansatte.",
-            f"Digitalt fundament på plass med egen nettside ({nettside_kilde})." if nettside else "Manglende nettside reduserer skalerbar aktivering.",
+            f"Nettsidevalidering: {valideringsstatus_tekst(nettside_status)}.",
             f"Kontaktbarhet: {epostdekning} identifiserte e-postadresser.",
             "Tydelig registrert forretningsadresse gir høy datakvalitet." if har_full_adresse else "Ufullstendig adresseinformasjon svekker datakvalitet.",
             f"{sammenlignbare} sammenlignbare selskaper i samme bransjekode gir god benchmark.",
@@ -664,7 +777,7 @@ def bygg_hovedscore(hoved_firma, leads):
         "intent_grunner": [
             f"{storre_enn_hoved} lignende selskaper er like store eller større – indikerer moden markedsdynamikk.",
             f"{lokal_klynge} relevante aktører i samme kommune øker sannsynlighet for lokal konkurranse om kompetanse.",
-            f"Nettside ({nettside_kilde}) + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging.",
+            "Nettside med god validering + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging." if nettside_ok else "Nettsidestatus svekker sannsynlighet for rask digital dialog.",
             "Bransjebredden i lead-settet gir signal om vedvarende opplæringsbehov i segmentet.",
             "Samlet vurdering: timing er gunstig for proaktiv kompetansedialog med beslutningstagere.",
         ],
@@ -687,11 +800,12 @@ def utfor_analyse(orgnr):
         st.session_state.forrige_sok = orgnr
         firmanavn = hoved.get("navn", "Ukjent")
 
-        registrert_nettside = verifiser_nettside(hoved.get("hjemmeside", ""))
+        registrert_hjemmeside = hoved.get("hjemmeside", "")
+        registrert_nettside = verifiser_nettside(registrert_hjemmeside)
         if registrert_nettside:
             hoved["hjemmeside"] = registrert_nettside
-            st.session_state.nettside_url = registrert_nettside
-            st.session_state.nettside_kilde = "brreg"
+            hoved["nettside_status"] = "confirmed"
+            st.session_state.nettside_kilde = "Brreg"
         else:
             funnet_nettside = finn_nettside_fallback(
                 firmanavn,
@@ -699,8 +813,17 @@ def utfor_analyse(orgnr):
                 hoved.get("forretningsadresse", {}).get("poststed", ""),
             )
             hoved["hjemmeside"] = funnet_nettside
-            st.session_state.nettside_url = funnet_nettside
-            st.session_state.nettside_kilde = "fallback" if funnet_nettside else ""
+            if funnet_nettside:
+                hoved["nettside_status"] = "inferred"
+                st.session_state.nettside_kilde = "Automatisk funnet"
+            elif registrert_hjemmeside:
+                hoved["nettside_status"] = "invalid"
+                st.session_state.nettside_kilde = "Ugyldig"
+            else:
+                hoved["nettside_status"] = "missing"
+                st.session_state.nettside_kilde = "Ikke funnet"
+
+        st.session_state.hoved_nettside_validering = hent_validering_fra_cache(hoved.get("hjemmeside", ""))
 
         nyheter = finn_nyheter(firmanavn)
         st.session_state.isbryter = lag_isbryter(
@@ -739,6 +862,14 @@ def utfor_analyse(orgnr):
                         leads.append(e)
 
             st.session_state.mine_leads = leads
+            for lead in st.session_state.mine_leads:
+                nettside = lead.get("hjemmeside") or ""
+                if not nettside:
+                    lead["nettside_status"] = "missing"
+                elif normaliser_nettside_url(nettside):
+                    lead["nettside_status"] = "inferred"
+                else:
+                    lead["nettside_status"] = "invalid"
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
@@ -804,6 +935,9 @@ if st.session_state.hoved_firma:
     if nettside and nettside_kilde == "fallback":
         nettside_visning = f"{nettside} (fallback)"
 
+    hoved_validering = st.session_state.get("hoved_nettside_validering") or hent_validering_fra_cache(nettside)
+    valideringsstatus = valideringsstatus_tekst(hoved_validering.get("status"))
+
     with st.container(border=True):
         st.markdown(f"""<h2 style="margin-top:0; margin-bottom:0.3rem; font-size:1.3rem;">{f.get("navn", "Ukjent")}</h2>
 <span class="firma-badge">{bransje}</span>
@@ -811,6 +945,7 @@ if st.session_state.hoved_firma:
     <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
     <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
     <div class="detalj"><strong>Nettside</strong> {nettside_visning}</div>
+    <div class="detalj"><strong>Nettsidevalidering</strong> {valideringsstatus}</div>
     <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
     {epost_html}
 </div>""", unsafe_allow_html=True)
