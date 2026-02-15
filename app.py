@@ -7,6 +7,7 @@ from duckduckgo_search import DDGS
 from openai import OpenAI
 from io import BytesIO
 from urllib.parse import urlparse
+from datetime import datetime, timezone
 
 # Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
@@ -475,6 +476,71 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
+    eposter = eposter or []
+    adresse = firma.get("forretningsadresse", {})
+    nettside = firma.get("hjemmeside") or ""
+    nettside_status = bool(verifiser_nettside(nettside) or normaliser_nettside_url(nettside))
+
+    adresse_felt = {
+        "adresse": bool(adresse.get("adresse")),
+        "postnummer": bool(adresse.get("postnummer")),
+        "poststed": bool(adresse.get("poststed")),
+        "kommunenummer": bool(adresse.get("kommunenummer")),
+    }
+    adresse_dekning = sum(adresse_felt.values())
+
+    score = 0
+    score += 30 if nettside_status else 0
+
+    if adresse_dekning == 4:
+        score += 30
+    elif adresse_dekning == 3:
+        score += 22
+    elif adresse_dekning == 2:
+        score += 15
+    elif adresse_dekning == 1:
+        score += 8
+
+    if len(eposter) >= 2:
+        score += 25
+    elif len(eposter) == 1:
+        score += 15
+
+    if enrichment_age_timer is None:
+        score += 8
+    elif enrichment_age_timer <= 24:
+        score += 15
+    elif enrichment_age_timer <= 72:
+        score += 12
+    elif enrichment_age_timer <= 168:
+        score += 8
+    else:
+        score += 4
+
+    score = max(0, min(100, score))
+    er_lav = score < 50
+
+    if enrichment_age_timer is None:
+        ferskhet_tekst = "Ferskhet ikke målt – estimat basert på nåværende datagrunnlag."
+    elif enrichment_age_timer <= 24:
+        ferskhet_tekst = "Enrichment-data er oppdatert siste 24 timer."
+    elif enrichment_age_timer <= 168:
+        ferskhet_tekst = "Enrichment-data er oppdatert siste uke."
+    else:
+        ferskhet_tekst = "Enrichment-data er eldre enn én uke."
+
+    return {
+        "datakvalitet": score,
+        "datakvalitet_grunner": [
+            "Nettside-status verifisert." if nettside_status else "Nettside mangler eller er ikke verifisert.",
+            f"Adressefelt med verdi: {adresse_dekning}/4.",
+            f"E-postdekning: {len(eposter)} registrerte adresser.",
+            ferskhet_tekst,
+        ],
+        "hoy_usikkerhet": er_lav,
+    }
+
 def bygg_leadscore(lead, hoved_firma):
     lead_ansatte = lead.get("antallAnsatte") or 0
     hoved_ansatte = hoved_firma.get("antallAnsatte") or 0
@@ -524,9 +590,12 @@ def bygg_leadscore(lead, hoved_firma):
         f"{geotekst}."
     )
 
+    datakvalitet = bygg_datakvalitet(lead, eposter=[], enrichment_age_timer=0)
+
     return {
         "passformscore": passformscore,
         "intentscore": intentscore,
+        "datakvalitet": datakvalitet["datakvalitet"],
         "passform_grunner": [
             bransjetekst,
             f"Størrelse: {lead_ansatte} ansatte",
@@ -537,6 +606,8 @@ def bygg_leadscore(lead, hoved_firma):
             geotekst,
             "Har digital tilstedeværelse" if nettside else "Begrenset digital tilstedeværelse",
         ],
+        "datakvalitet_grunner": datakvalitet["datakvalitet_grunner"],
+        "hoy_usikkerhet": datakvalitet["hoy_usikkerhet"],
         "hvorfor_na": hvorfor_na,
     }
 
@@ -586,9 +657,20 @@ def bygg_hovedscore(hoved_firma, leads):
         intentscore += 10
     intentscore = max(0, min(100, intentscore))
 
+    enrichment_tidspunkt = st.session_state.get("enrichment_tidspunkt")
+    enrichment_age_timer = None
+    if enrichment_tidspunkt:
+        enrichment_age_timer = max(
+            0,
+            (datetime.now(timezone.utc) - enrichment_tidspunkt).total_seconds() / 3600,
+        )
+
+    datakvalitet = bygg_datakvalitet(hoved_firma, eposter=st.session_state.get("eposter", []), enrichment_age_timer=enrichment_age_timer)
+
     return {
         "passformscore": passformscore,
         "intentscore": intentscore,
+        "datakvalitet": datakvalitet["datakvalitet"],
         "passform_grunner": [
             f"Størrelse i kjernesegment: {ansatte} ansatte.",
             "Digitalt fundament på plass med egen nettside." if nettside else "Manglende nettside reduserer skalerbar aktivering.",
@@ -603,6 +685,8 @@ def bygg_hovedscore(hoved_firma, leads):
             "Bransjebredden i lead-settet gir signal om vedvarende opplæringsbehov i segmentet.",
             "Samlet vurdering: timing er gunstig for proaktiv kompetansedialog med beslutningstagere.",
         ],
+        "datakvalitet_grunner": datakvalitet["datakvalitet_grunner"],
+        "hoy_usikkerhet": datakvalitet["hoy_usikkerhet"],
     }
 
 def scroll_til_toppen():
@@ -638,6 +722,7 @@ def utfor_analyse(orgnr):
             hoved.get("naeringskode1", {}).get("beskrivelse", "Ukjent"),
         )
         st.session_state.eposter = finn_eposter(hoved.get("hjemmeside"))
+        st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
@@ -746,7 +831,7 @@ if st.session_state.hoved_firma:
 
         hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
-        col_h_pf, col_h_int = st.columns(2)
+        col_h_pf, col_h_int, col_h_dk = st.columns(3)
         with col_h_pf:
             st.markdown(f"""
             <div class="score-kort">
@@ -775,6 +860,22 @@ if st.session_state.hoved_firma:
                 </ul>
             </div>
             """, unsafe_allow_html=True)
+        with col_h_dk:
+            st.markdown(f"""
+            <div class="score-kort">
+                <div class="score-title">Datakvalitet (hovedselskap)</div>
+                <div class="score-value">{hovedscore['datakvalitet']}/100</div>
+                <ul>
+                    <li>{hovedscore['datakvalitet_grunner'][0]}</li>
+                    <li>{hovedscore['datakvalitet_grunner'][1]}</li>
+                    <li>{hovedscore['datakvalitet_grunner'][2]}</li>
+                    <li>{hovedscore['datakvalitet_grunner'][3]}</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+
+        if hovedscore["hoy_usikkerhet"]:
+            st.warning("Lav datakvalitet: scorevurderingen har høy usikkerhet. Verifiser nøkkelfelter før prioritering.")
 
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_hub, col_space = st.columns([1, 2])
@@ -821,7 +922,7 @@ if st.session_state.hoved_firma:
                 hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
                 st.markdown(f"""<div class="lead-why-now">{hvorfor_na_html}</div>""", unsafe_allow_html=True)
 
-                col_pf, col_int = st.columns(2)
+                col_pf, col_int, col_dk = st.columns(3)
                 with col_pf:
                     st.markdown(f"""
                     <div class="score-kort">
@@ -846,6 +947,22 @@ if st.session_state.hoved_firma:
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
+                with col_dk:
+                    st.markdown(f"""
+                    <div class="score-kort">
+                        <div class="score-title">Datakvalitet</div>
+                        <div class="score-value">{scoredata['datakvalitet']}/100</div>
+                        <ul>
+                            <li>{scoredata['datakvalitet_grunner'][0]}</li>
+                            <li>{scoredata['datakvalitet_grunner'][1]}</li>
+                            <li>{scoredata['datakvalitet_grunner'][2]}</li>
+                            <li>{scoredata['datakvalitet_grunner'][3]}</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                if scoredata["hoy_usikkerhet"]:
+                    st.warning("Lav datakvalitet: denne leadscoren har høy usikkerhet.")
 
                 st.markdown('<div style="margin-top: 0.9rem;"></div>', unsafe_allow_html=True)
                 col_a, col_b = st.columns([3, 1])
