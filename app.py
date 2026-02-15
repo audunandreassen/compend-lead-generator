@@ -1228,39 +1228,26 @@ def oppdater_scorecards_med_ny_data():
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
-    components.html(
-        """
-        <script>
-            function scrollToTop() {
-                try {
-                    var doc = window.parent.document;
-                    var targets = [
-                        doc.querySelector('[data-testid="stAppViewContainer"]'),
-                        doc.querySelector('section.main'),
-                        doc.querySelector('.main'),
-                        doc.querySelector('main'),
-                        doc.body,
-                        doc.documentElement
-                    ];
-                    for (var i = 0; i < targets.length; i++) {
-                        if (targets[i]) {
-                            targets[i].scrollTop = 0;
-                        }
-                    }
-                    window.parent.scrollTo(0, 0);
-                } catch(e) {}
-            }
-            // Fire immediately and then repeatedly with increasing delays
-            // to ensure we catch the moment after Streamlit finishes rendering
-            scrollToTop();
-            requestAnimationFrame(scrollToTop);
-            var delays = [50, 100, 200, 300, 500, 800, 1200];
-            for (var d = 0; d < delays.length; d++) {
-                setTimeout(scrollToTop, delays[d]);
-            }
-        </script>
-        """,
-        height=0,
+    # Use an <img onload> trick to execute JS directly in the Streamlit
+    # document context (not in an iframe like components.html does).
+    # This gives direct DOM access without cross-origin restrictions.
+    scroll_js = (
+        "var c=document.querySelectorAll("
+        "'[data-testid=stAppViewContainer],section.main,.main,main'"
+        ");for(var i=0;i<c.length;i++)c[i].scrollTop=0;"
+        "document.body.scrollTop=0;document.documentElement.scrollTop=0;"
+        "window.scrollTo(0,0);"
+    )
+    delayed_js = "".join(
+        f"setTimeout(function(){{{scroll_js}}},{d});"
+        for d in [50, 150, 300, 600, 1000, 1500]
+    )
+    ts = id(object())  # unique value to force React re-render
+    st.markdown(
+        f'<img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==" '
+        f'onload="{scroll_js}{delayed_js}" '
+        f'alt="" data-k="{ts}" style="display:none" height="0" width="0">',
+        unsafe_allow_html=True,
     )
 
 def utfor_analyse(orgnr):
