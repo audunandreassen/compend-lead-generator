@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 import requests
 import pandas as pd
@@ -9,7 +10,18 @@ from io import BytesIO
 # Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
-klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+
+def hent_secret(nokkel):
+    try:
+        return st.secrets[nokkel]
+    except Exception:
+        return None
+
+
+openai_api_key = hent_secret("OPENAI_API_KEY")
+hunter_api_key = hent_secret("HUNTER_API_KEY")
+klient = OpenAI(api_key=openai_api_key) if openai_api_key else None
 modell_navn = "gpt-4o-mini"
 
 # --- DESIGN OG STYLING ---
@@ -278,12 +290,14 @@ if "mine_leads" not in st.session_state:
     st.session_state.mine_leads = []
 if "hoved_firma" not in st.session_state:
     st.session_state.hoved_firma = None
-if "soke_felt" not in st.session_state:
-    st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
 if "siste_sok_valg" not in st.session_state:
     st.session_state.siste_sok_valg = None
+if "pending_scroll_orgnr" not in st.session_state:
+    st.session_state.pending_scroll_orgnr = None
+if "scroll_then_analyze" not in st.session_state:
+    st.session_state.scroll_then_analyze = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -310,6 +324,9 @@ def finn_nyheter(firmanavn):
         return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
+    if not klient:
+        return "Legg inn OPENAI_API_KEY i secrets for AI-analyse."
+
     prompt = f"""
     Du er en salgsstrateg for Compend (www.compend.no). 
     Compend leverer plattformer for kurs, opplæring og kompetanseutvikling (LMS).
@@ -341,7 +358,7 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
         return "Kunne ikke generere analyse."
 
 def finn_eposter(domene):
-    if not domene:
+    if not domene or not hunter_api_key:
         return []
     rent_domene = (
         domene.replace("https://", "")
@@ -354,7 +371,7 @@ def finn_eposter(domene):
             "https://api.hunter.io/v2/domain-search",
             params={
                 "domain": rent_domene,
-                "api_key": st.secrets["HUNTER_API_KEY"],
+                "api_key": hunter_api_key,
                 "limit": 5,
             },
         )
@@ -388,7 +405,6 @@ def utfor_analyse(orgnr):
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
-            antall = hoved.get("antallAnsatte") or 0
             params = {
                 "naeringskode": kode,
                 "sort": "antallAnsatte,desc",
@@ -449,7 +465,39 @@ with col_m:
         key="brreg_sok",
     )
 
-if valgt and valgt != st.session_state.siste_sok_valg:
+run_analysis_param = st.query_params.get("run_analysis") == "1"
+query_orgnr = st.query_params.get("orgnr")
+
+if st.session_state.scroll_then_analyze and st.session_state.pending_scroll_orgnr and not run_analysis_param:
+    pending_orgnr = st.session_state.pending_scroll_orgnr
+    components.html(
+        f"""
+        <script>
+            window.parent?.scrollTo({{ top: 0, behavior: 'smooth' }});
+            window.scrollTo({{ top: 0, behavior: 'smooth' }});
+            setTimeout(() => {{
+                const url = new URL(window.location.href);
+                url.searchParams.set('run_analysis', '1');
+                url.searchParams.set('orgnr', '{pending_orgnr}');
+                window.location.href = url.toString();
+            }}, 350);
+        </script>
+        """,
+        height=0,
+    )
+    st.stop()
+
+if run_analysis_param:
+    orgnr = query_orgnr or st.session_state.pending_scroll_orgnr
+    st.query_params.clear()
+    st.session_state.pending_scroll_orgnr = None
+    st.session_state.scroll_then_analyze = False
+    if orgnr:
+        with st.spinner("Analyserer..."):
+            utfor_analyse(orgnr)
+    st.rerun()
+
+if valgt and valgt != st.session_state.siste_sok_valg and not run_analysis_param:
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(valgt)
     st.session_state.siste_sok_valg = valgt
@@ -516,7 +564,6 @@ if st.session_state.hoved_firma:
                 col_a, col_b = st.columns([3, 1])
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
-                        st.session_state.soke_felt = lead["organisasjonsnummer"]
-                        with st.spinner("Analyserer..."):
-                            utfor_analyse(lead["organisasjonsnummer"])
+                        st.session_state.pending_scroll_orgnr = lead["organisasjonsnummer"]
+                        st.session_state.scroll_then_analyze = True
                         st.rerun()
