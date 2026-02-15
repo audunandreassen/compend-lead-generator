@@ -1228,26 +1228,66 @@ def oppdater_scorecards_med_ny_data():
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
-    # Use an <img onload> trick to execute JS directly in the Streamlit
-    # document context (not in an iframe like components.html does).
-    # This gives direct DOM access without cross-origin restrictions.
-    scroll_js = (
-        "var c=document.querySelectorAll("
-        "'[data-testid=stAppViewContainer],section.main,.main,main'"
-        ");for(var i=0;i<c.length;i++)c[i].scrollTop=0;"
-        "document.body.scrollTop=0;document.documentElement.scrollTop=0;"
-        "window.scrollTo(0,0);"
-    )
-    delayed_js = "".join(
-        f"setTimeout(function(){{{scroll_js}}},{d});"
-        for d in [50, 150, 300, 600, 1000, 1500]
-    )
-    ts = id(object())  # unique value to force React re-render
-    st.markdown(
-        f'<img src="data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==" '
-        f'onload="{scroll_js}{delayed_js}" '
-        f'alt="" data-k="{ts}" style="display:none" height="0" width="0">',
-        unsafe_allow_html=True,
+    # Use components.html with height=2 (height=0 may prevent iframe from rendering).
+    # Brute-force approach: find ANY element with scrollTop > 0 and reset it,
+    # plus a MutationObserver to keep scrolling after Streamlit's own scroll
+    # restoration fires.
+    components.html(
+        """
+        <script>
+        (function() {
+            var p, doc;
+            try { p = window.parent; doc = p.document; } catch(e) {
+                try { p = window.top; doc = p.document; } catch(e2) { return; }
+            }
+            if (!doc || !doc.body) return;
+
+            function scrollKnown() {
+                var sels = [
+                    '[data-testid="stAppViewContainer"]',
+                    '[data-testid="stMain"]',
+                    '[data-testid="stMainBlockContainer"]',
+                    '[data-testid="stVerticalBlock"]',
+                    'section.main',
+                    '.main',
+                    'main',
+                    '.stApp'
+                ];
+                for (var s = 0; s < sels.length; s++) {
+                    var el = doc.querySelector(sels[s]);
+                    if (el) { el.scrollTop = 0; }
+                }
+                doc.body.scrollTop = 0;
+                doc.documentElement.scrollTop = 0;
+                try { p.scrollTo(0, 0); } catch(e) {}
+            }
+
+            function scrollBruteForce() {
+                scrollKnown();
+                var all = doc.querySelectorAll('*');
+                for (var i = 0; i < all.length; i++) {
+                    try { if (all[i].scrollTop > 0) all[i].scrollTop = 0; } catch(e) {}
+                }
+            }
+
+            scrollBruteForce();
+
+            var end = Date.now() + 3000;
+            var obs = new MutationObserver(function() {
+                if (Date.now() < end) { scrollKnown(); }
+                else { obs.disconnect(); }
+            });
+            obs.observe(doc.body, {childList: true, subtree: true});
+
+            var delays = [50, 100, 200, 400, 700, 1000, 1500, 2000, 2500, 3000];
+            for (var d = 0; d < delays.length; d++) {
+                setTimeout(scrollBruteForce, delays[d]);
+            }
+            setTimeout(function() { obs.disconnect(); }, 3500);
+        })();
+        </script>
+        """,
+        height=2,
     )
 
 def utfor_analyse(orgnr):
