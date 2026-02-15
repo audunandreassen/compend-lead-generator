@@ -251,7 +251,7 @@ if st.session_state.hoved_firma:
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
         st.write(f"**Organisasjonsnummer:** {f['organisasjonsnummer']}")
-        st.write(f"**Ansatte:** {f.get('antallAntatte', 'Ukjent')}")
+        st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')}")
     with c2:
         st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke oppgitt')}")
@@ -265,7 +265,7 @@ if st.session_state.hoved_firma:
                 "orgnr": f["organisasjonsnummer"],
                 "isbryter": st.session_state.get("isbryter"),
                 "bransje": f.get("naeringskode1", {}).get("beskrivelse"),
-                "ansatte": f.get("antallAntatte"),
+                "ansatte": f.get("antallAnsatte"),
                 "adresse": formater_adresse(f),
                 "nettside": f.get("hjemmeside"),
                 "eposter": ", ".join(st.session_state.get("eposter", [])),
@@ -283,7 +283,7 @@ if st.session_state.hoved_firma:
             with st.container():
                 col_a, col_b = st.columns([4, 1])
                 with col_a:
-                    st.write(f"**{lead['navn']}** | {lead.get('antallAntatte', 0)} ansatte")
+                    st.write(f"**{lead['navn']}** | {lead.get('antallAnsatte', 0)} ansatte")
                     st.write(
                         f"{lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')} | "
                         f"{lead.get('hjemmeside', 'Ingen nettside')}"
