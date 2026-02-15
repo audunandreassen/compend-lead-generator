@@ -189,6 +189,48 @@ def bruk_stil():
             margin-left: 8px;
         }
 
+        .lead-why-now {
+            margin-top: 0.7rem;
+            font-size: 0.82rem;
+            color: #23444d;
+            line-height: 1.55;
+            background: #f7fbfa;
+            border: 1px solid #e0ece8;
+            border-radius: 8px;
+            padding: 0.7rem 0.8rem;
+        }
+
+        .score-kort {
+            margin-top: 0.6rem;
+            border: 1px solid #e0e7ec;
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            background: #ffffff;
+        }
+
+        .score-kort .score-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b8a93;
+            font-weight: 600;
+        }
+
+        .score-kort .score-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #003642;
+            margin: 0.1rem 0 0.35rem 0;
+        }
+
+        .score-kort ul {
+            margin: 0;
+            padding-left: 1rem;
+            color: #37535b;
+            font-size: 0.8rem;
+            line-height: 1.45;
+        }
+
         /* --- Header --- */
         .app-header {
             text-align: center;
@@ -539,6 +581,37 @@ if st.session_state.hoved_firma:
                 st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
 <span class="lead-ansatte">{ansatte} ansatte</span>
 <div class="lead-info">{poststed}{nettside_tekst}</div>""", unsafe_allow_html=True)
+
+                scoredata = bygg_leadscore(lead, st.session_state.hoved_firma)
+                hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
+                st.markdown(f"""<div class="lead-why-now">{hvorfor_na_html}</div>""", unsafe_allow_html=True)
+
+                col_pf, col_int = st.columns(2)
+                with col_pf:
+                    st.markdown(f"""
+                    <div class="score-kort">
+                        <div class="score-title">Passformscore</div>
+                        <div class="score-value">{scoredata['passformscore']}/100</div>
+                        <ul>
+                            <li>{scoredata['passform_grunner'][0]}</li>
+                            <li>{scoredata['passform_grunner'][1]}</li>
+                            <li>{scoredata['passform_grunner'][2]}</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_int:
+                    st.markdown(f"""
+                    <div class="score-kort">
+                        <div class="score-title">Intentscore</div>
+                        <div class="score-value">{scoredata['intentscore']}/100</div>
+                        <ul>
+                            <li>{scoredata['intent_grunner'][0]}</li>
+                            <li>{scoredata['intent_grunner'][1]}</li>
+                            <li>{scoredata['intent_grunner'][2]}</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+
                 col_a, col_b = st.columns([3, 1])
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
