@@ -278,17 +278,14 @@ if st.session_state.hoved_firma:
                         st.rerun()
                 st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
-# Nederst i appen: hvis vi nettopp har analysert et nytt selskap, naviger til #top
+# Nederst i appen: hvis vi nettopp har analysert et nytt selskap, scroll til toppen
 if st.session_state.get("scroll_to_top", False):
     st.session_state.scroll_to_top = False
-    st.markdown(
+    st.components.v1.html(
         """
         <script>
-        const topAnchor = document.querySelector("a[id='top']");
-        if (topAnchor) {
-            topAnchor.scrollIntoView({ behavior: "instant", block: "start" });
-        }
+        window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'instant'});
         </script>
         """,
-        unsafe_allow_html=True,
+        height=0,
     )
