@@ -13,70 +13,253 @@ modell_navn = "gpt-4o-mini"
 
 # --- DESIGN OG STYLING ---
 def bruk_stil():
-    st.markdown(f"""
+    st.markdown("""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
-        
-        html, body, [class*="css"] {{
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+        html, body, [class*="css"] {
             font-family: 'Inter', sans-serif;
             color: #003642;
-            background-color: #FFFFFF;
-        }}
+            background-color: #f7f9fb;
+        }
 
-        .stApp {{
-            background-color: #FFFFFF;
-        }}
-        
-        .stButton>button {{
+        .stApp {
+            background-color: #f7f9fb;
+        }
+
+        .block-container {
+            padding-top: 2rem;
+            max-width: 960px;
+        }
+
+        /* --- Knapper --- */
+        .stButton>button {
             background-color: #368373;
             color: white;
-            border-radius: 2px;
+            border-radius: 8px;
             border: none;
             padding: 10px 24px;
-            transition: 0.2s;
-            font-weight: 400;
-        }}
-        
-        .stButton>button:hover {{
-            background-color: #003642;
+            transition: all 0.2s ease;
+            font-weight: 500;
+            font-size: 0.9rem;
+            letter-spacing: 0.01em;
+        }
+
+        .stButton>button:hover {
+            background-color: #2a6a5c;
             color: white;
             border: none;
-        }}
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(54, 131, 115, 0.3);
+        }
 
-        .stTextInput>div>div>input {{
+        .stButton>button:active {
+            transform: translateY(0);
+        }
+
+        /* --- Input-felt --- */
+        .stTextInput>div>div>input {
             background-color: #FFFFFF !important;
-            border-radius: 2px;
-            border: 1px solid #368373;
-            padding: 10px 20px;
+            border-radius: 8px;
+            border: 1.5px solid #d0dde3;
+            padding: 12px 20px;
             color: #003642;
-        }}
+            font-size: 0.95rem;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
 
-        .stAlert {{
-            background-color: transparent !important;
-            border: none !important;
-            border-left: 4px solid #003642 !important;
+        .stTextInput>div>div>input:focus {
+            border-color: #368373 !important;
+            box-shadow: 0 0 0 3px rgba(54, 131, 115, 0.12) !important;
+        }
+
+        /* --- Alerts / Info-bokser --- */
+        .stAlert {
+            background-color: #ffffff !important;
+            border: 1px solid #d0dde3 !important;
+            border-left: 4px solid #368373 !important;
             color: #003642;
-            border-radius: 0px;
-            padding-left: 1.5rem;
-        }}
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            line-height: 1.6;
+        }
 
-        h1, h2, h3 {{
+        /* --- Overskrifter --- */
+        h1, h2, h3 {
+            color: #003642;
+            font-weight: 700;
+        }
+
+        h1 {
+            font-size: 1.6rem !important;
+        }
+
+        h2 {
+            font-size: 1.2rem !important;
+            font-weight: 600;
+        }
+
+        hr {
+            border: 0;
+            border-top: 1px solid #e0e7ec;
+            margin: 1.5rem 0;
+        }
+
+        /* --- Kort-styling --- */
+        .firma-kort {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.8rem;
+            box-shadow: 0 1px 3px rgba(0, 54, 66, 0.06), 0 1px 2px rgba(0, 54, 66, 0.04);
+            border: 1px solid #e0e7ec;
+            margin-bottom: 1rem;
+        }
+
+        .firma-kort h2 {
+            margin-top: 0;
+            margin-bottom: 0.3rem;
+            font-size: 1.3rem !important;
+        }
+
+        .firma-badge {
+            display: inline-block;
+            background: #eef6f4;
+            color: #368373;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        .firma-detaljer {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem 2rem;
+            margin-top: 1rem;
+        }
+
+        .firma-detaljer .detalj {
+            font-size: 0.88rem;
+            color: #4a6a72;
+        }
+
+        .firma-detaljer .detalj strong {
             color: #003642;
             font-weight: 600;
-        }}
-        
-        hr {{
-            border: 0;
-            border-top: 1px solid #368373;
-            opacity: 0.1;
-        }}
+        }
 
-        .block-container {{
-            padding-top: 5rem;
-        }}
+        /* --- Analyse-kort --- */
+        .analyse-kort {
+            background: linear-gradient(135deg, #003642 0%, #0a4f5c 100%);
+            border-radius: 12px;
+            padding: 1.5rem 1.8rem;
+            color: #ffffff;
+            margin: 1rem 0;
+            line-height: 1.7;
+            font-size: 0.92rem;
+        }
 
-        #MainMenu {{visibility: hidden;}}
-        footer {{visibility: hidden;}}
+        .analyse-kort .analyse-label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: rgba(255,255,255,0.6);
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        /* --- Lead-kort --- */
+        .lead-kort {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 1rem 1.4rem;
+            border: 1px solid #e0e7ec;
+            margin-bottom: 0.5rem;
+            transition: all 0.15s ease;
+        }
+
+        .lead-kort:hover {
+            border-color: #368373;
+            box-shadow: 0 2px 8px rgba(54, 131, 115, 0.1);
+        }
+
+        .lead-navn {
+            font-weight: 600;
+            color: #003642;
+            font-size: 0.92rem;
+        }
+
+        .lead-info {
+            color: #6b8a93;
+            font-size: 0.82rem;
+            margin-top: 2px;
+        }
+
+        .lead-ansatte {
+            display: inline-block;
+            background: #eef6f4;
+            color: #368373;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        /* --- Header --- */
+        .app-header {
+            text-align: center;
+            padding: 1rem 0 2rem 0;
+        }
+
+        .app-header h1 {
+            font-size: 1.8rem !important;
+            font-weight: 700;
+            color: #003642;
+            margin-bottom: 0.3rem;
+        }
+
+        .app-header p {
+            color: #6b8a93;
+            font-size: 0.95rem;
+            margin: 0;
+        }
+
+        /* --- Seksjon-headers --- */
+        .seksjon-header {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #6b8a93;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            margin-top: 1.5rem;
+        }
+
+        /* --- HubSpot-knapp spesialstyling --- */
+        .hubspot-btn button {
+            background-color: #003642 !important;
+            border-radius: 8px !important;
+        }
+
+        .hubspot-btn button:hover {
+            background-color: #00252e !important;
+            box-shadow: 0 4px 12px rgba(0, 54, 66, 0.3) !important;
+        }
+
+        /* --- Success-melding --- */
+        .stSuccess {
+            background-color: #eef6f4 !important;
+            border: 1px solid #368373 !important;
+            color: #003642 !important;
+            border-radius: 8px;
+        }
+
+        /* --- Skjul Streamlit-elementer --- */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
         </style>
     """, unsafe_allow_html=True)
 
@@ -84,8 +267,13 @@ def bruk_stil():
 st.set_page_config(page_title="Compend Insights", layout="wide")
 bruk_stil()
 
-# Anker på toppen
-st.markdown('<a id="top"></a>', unsafe_allow_html=True)
+# Header
+st.markdown("""
+    <div class="app-header">
+        <h1>Compend Insights</h1>
+        <p>Finn, analyser og kvalifiser nye leads</p>
+    </div>
+""", unsafe_allow_html=True)
 
 if "mine_leads" not in st.session_state:
     st.session_state.mine_leads = []
@@ -221,13 +409,13 @@ def utfor_analyse(orgnr):
         st.error("Ugyldig organisasjonsnummer.")
 
 # Søkefelt
-col_l, col_m, col_r = st.columns([1, 2, 1])
+col_l, col_m, col_r = st.columns([1, 3, 1])
 with col_m:
     org_input = st.text_input(
         "Søk på organisasjonsnummer",
         value=st.session_state.soke_felt,
         label_visibility="collapsed",
-        placeholder="Tast inn organisasjonsnummer (9 siffer)",
+        placeholder="Organisasjonsnummer (9 siffer)",
     )
     start_knapp = st.button("Analyser selskap", use_container_width=True)
 
@@ -244,54 +432,73 @@ if start_knapp:
 # --- VISNING ---
 if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
-    st.markdown("<hr>", unsafe_allow_html=True)
-    
-    st.subheader(f.get("navn"))
-    
-    c1, c2, c3 = st.columns([2, 2, 1])
-    with c1:
-        st.write(f"**Organisasjonsnummer:** {f.get('organisasjonsnummer', 'Ukjent')}")
-        st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
-        st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')}")
-    with c2:
-        st.write(f"**Nettside:** {f.get('hjemmeside', 'Ikke oppgitt')}")
-        st.write(f"**Adresse:** {formater_adresse(f)}")
-        if st.session_state.get("eposter"):
-            st.write(f"**E-postadresser:** {', '.join(st.session_state.eposter)}")
-    with c3:
+    bransje = f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')
+    eposter = st.session_state.get("eposter", [])
+    epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
+
+    st.markdown(f"""
+        <div class="firma-kort">
+            <h2>{f.get("navn", "Ukjent")}</h2>
+            <span class="firma-badge">{bransje}</span>
+            <div class="firma-detaljer">
+                <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
+                <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
+                <div class="detalj"><strong>Nettside</strong> {f.get('hjemmeside', 'Ikke oppgitt')}</div>
+                <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
+                {epost_html}
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    col_hub, col_space = st.columns([1, 2])
+    with col_hub:
+        st.markdown('<div class="hubspot-btn">', unsafe_allow_html=True)
         if st.button("Overfør til HubSpot", use_container_width=True):
             data_pakke = {
                 "firma": f.get("navn", "Ukjent"),
                 "organisasjonsnummer": f.get("organisasjonsnummer", ""),
                 "isbryter": st.session_state.get("isbryter"),
-                "bransje": f.get("naeringskode1", {}).get("beskrivelse"),
+                "bransje": bransje,
                 "ansatte": f.get("antallAnsatte"),
                 "adresse": formater_adresse(f),
                 "nettside": f.get("hjemmeside"),
-                "eposter": ", ".join(st.session_state.get("eposter", [])),
+                "eposter": ", ".join(eposter),
             }
             requests.post(zapier_mottaker, json=data_pakke)
-            st.success("Data overført")
+            st.success("Overfort til HubSpot")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.info(st.session_state.get("isbryter"))
+    # Analyse-kort
+    isbryter = st.session_state.get("isbryter")
+    if isbryter:
+        st.markdown(f"""
+            <div class="analyse-kort">
+                <div class="analyse-label">AI-analyse</div>
+                {isbryter}
+            </div>
+        """, unsafe_allow_html=True)
     
     if st.session_state.mine_leads:
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("Andre aktører i bransjen")
-        
+        st.markdown('<div class="seksjon-header">Andre aktorer i bransjen</div>', unsafe_allow_html=True)
+
         for i, lead in enumerate(st.session_state.mine_leads):
-            with st.container():
-                col_a, col_b = st.columns([4, 1])
-                with col_a:
-                    st.write(f"**{lead['navn']}** | {lead.get('antallAnsatte', 0)} ansatte")
-                    st.write(
-                        f"{lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')} | "
-                        f"{lead.get('hjemmeside', 'Ingen nettside')}"
-                    )
-                with col_b:
-                    if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
-                        st.session_state.soke_felt = lead["organisasjonsnummer"]
-                        utfor_analyse(lead["organisasjonsnummer"])
-                        st.rerun()
-                st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+            poststed = lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')
+            nettside = lead.get('hjemmeside', '')
+            ansatte = lead.get('antallAnsatte', 0)
+            nettside_tekst = f" &middot; {nettside}" if nettside else ""
+
+            col_a, col_b = st.columns([5, 1])
+            with col_a:
+                st.markdown(f"""
+                    <div class="lead-kort">
+                        <span class="lead-navn">{lead['navn']}</span>
+                        <span class="lead-ansatte">{ansatte} ansatte</span>
+                        <div class="lead-info">{poststed}{nettside_tekst}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_b:
+                if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
+                    st.session_state.soke_felt = lead["organisasjonsnummer"]
+                    utfor_analyse(lead["organisasjonsnummer"])
+                    st.rerun()
 
