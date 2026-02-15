@@ -282,6 +282,8 @@ if "soke_felt" not in st.session_state:
     st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
+if "siste_sok_valg" not in st.session_state:
+    st.session_state.siste_sok_valg = None
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -447,9 +449,10 @@ with col_m:
         key="brreg_sok",
     )
 
-if valgt and valgt != st.session_state.forrige_sok:
+if valgt and valgt != st.session_state.siste_sok_valg:
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(valgt)
+    st.session_state.siste_sok_valg = valgt
     st.rerun()
 
 # --- VISNING ---
@@ -517,4 +520,3 @@ if st.session_state.hoved_firma:
                         with st.spinner("Analyserer..."):
                             utfor_analyse(lead["organisasjonsnummer"])
                         st.rerun()
-
