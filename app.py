@@ -6,6 +6,7 @@ import pandas as pd
 from duckduckgo_search import DDGS
 from openai import OpenAI
 from io import BytesIO
+from urllib.parse import urlparse
 
 # Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
@@ -329,6 +330,8 @@ if "auto_analyse_orgnr" not in st.session_state:
     st.session_state.auto_analyse_orgnr = None
 if "scroll_topp" not in st.session_state:
     st.session_state.scroll_topp = False
+if "nettside_kilde" not in st.session_state:
+    st.session_state.nettside_kilde = ""
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -353,6 +356,61 @@ def finn_nyheter(firmanavn):
         return "\n".join([r['body'] for r in resultater]) if resultater else ""
     except:
         return ""
+
+def normaliser_nettside_url(url):
+    if not url:
+        return ""
+    kandidat = url.strip()
+    if not kandidat:
+        return ""
+    if not kandidat.startswith(("http://", "https://")):
+        kandidat = f"https://{kandidat}"
+    parsed = urlparse(kandidat)
+    host = parsed.netloc.lower().replace("www.", "")
+    if not host or "." not in host:
+        return ""
+    return host
+
+def verifiser_nettside(url):
+    domene = normaliser_nettside_url(url)
+    if not domene:
+        return ""
+
+    for kandidat in (f"https://{domene}", f"http://{domene}"):
+        try:
+            svar = requests.get(kandidat, timeout=4, allow_redirects=True)
+            if svar.status_code < 400:
+                return kandidat
+        except:
+            continue
+    return ""
+
+def finn_nettside_for_firma(firmanavn):
+    if not firmanavn:
+        return ""
+
+    blokkerte_domener = {
+        "facebook.com", "instagram.com", "linkedin.com", "proff.no", "purehelp.no",
+        "wikipedia.org", "gulesider.no", "1881.no", "brreg.no", "enhetsregisteret.no",
+    }
+
+    try:
+        resultater = DDGS().text(f"{firmanavn} offisiell nettside", max_results=8)
+    except:
+        return ""
+
+    for resultat in resultater or []:
+        href = resultat.get("href", "")
+        domene = normaliser_nettside_url(href)
+        if not domene:
+            continue
+        if any(domene == blokkert or domene.endswith(f".{blokkert}") for blokkert in blokkerte_domener):
+            continue
+
+        verifisert = verifiser_nettside(domene)
+        if verifisert:
+            return verifisert
+    return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
     prompt = f"""
@@ -563,6 +621,16 @@ def utfor_analyse(orgnr):
         st.session_state.hoved_firma = hoved
         st.session_state.forrige_sok = orgnr
         firmanavn = hoved.get("navn", "Ukjent")
+
+        registrert_nettside = verifiser_nettside(hoved.get("hjemmeside", ""))
+        if registrert_nettside:
+            hoved["hjemmeside"] = registrert_nettside
+            st.session_state.nettside_kilde = "Brreg"
+        else:
+            funnet_nettside = finn_nettside_for_firma(firmanavn)
+            hoved["hjemmeside"] = funnet_nettside
+            st.session_state.nettside_kilde = "Automatisk funnet" if funnet_nettside else "Ikke funnet"
+
         nyheter = finn_nyheter(firmanavn)
         st.session_state.isbryter = lag_isbryter(
             firmanavn,
@@ -659,6 +727,11 @@ if st.session_state.hoved_firma:
     bransje = f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
+    nettside_kilde = st.session_state.get("nettside_kilde", "")
+    nettside = f.get("hjemmeside", "")
+    nettside_visning = nettside if nettside else "Ikke oppgitt"
+    if nettside and nettside_kilde == "Automatisk funnet":
+        nettside_visning = f"{nettside} (automatisk funnet)"
 
     with st.container(border=True):
         st.markdown(f"""<h2 style="margin-top:0; margin-bottom:0.3rem; font-size:1.3rem;">{f.get("navn", "Ukjent")}</h2>
@@ -666,7 +739,7 @@ if st.session_state.hoved_firma:
 <div class="firma-detaljer">
     <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
     <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
-    <div class="detalj"><strong>Nettside</strong> {f.get('hjemmeside', 'Ikke oppgitt')}</div>
+    <div class="detalj"><strong>Nettside</strong> {nettside_visning}</div>
     <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
     {epost_html}
 </div>""", unsafe_allow_html=True)
