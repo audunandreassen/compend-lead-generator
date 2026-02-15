@@ -105,20 +105,12 @@ def bruk_stil():
             margin: 1.5rem 0;
         }
 
-        /* --- Kort-styling --- */
-        .firma-kort {
+        /* --- Kort-styling (st.container med border) --- */
+        div[data-testid="stVerticalBlockBorderWrapper"] {
             background: #ffffff;
-            border-radius: 12px;
-            padding: 1.8rem;
+            border-radius: 12px !important;
+            border: 1px solid #e0e7ec !important;
             box-shadow: 0 1px 3px rgba(0, 54, 66, 0.06), 0 1px 2px rgba(0, 54, 66, 0.04);
-            border: 1px solid #e0e7ec;
-            margin-bottom: 1rem;
-        }
-
-        .firma-kort h2 {
-            margin-top: 0;
-            margin-bottom: 0.3rem;
-            font-size: 1.3rem !important;
         }
 
         .firma-badge {
@@ -456,35 +448,32 @@ if st.session_state.hoved_firma:
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
 
-    st.markdown(f"""
-        <div class="firma-kort">
-            <h2>{f.get("navn", "Ukjent")}</h2>
-            <span class="firma-badge">{bransje}</span>
-            <div class="firma-detaljer">
-                <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
-                <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
-                <div class="detalj"><strong>Nettside</strong> {f.get('hjemmeside', 'Ikke oppgitt')}</div>
-                <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
-                {epost_html}
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown(f"""<h2 style="margin-top:0; margin-bottom:0.3rem; font-size:1.3rem;">{f.get("navn", "Ukjent")}</h2>
+<span class="firma-badge">{bransje}</span>
+<div class="firma-detaljer">
+    <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
+    <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
+    <div class="detalj"><strong>Nettside</strong> {f.get('hjemmeside', 'Ikke oppgitt')}</div>
+    <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
+    {epost_html}
+</div>""", unsafe_allow_html=True)
 
-    col_hub, col_space = st.columns([1, 2])
-    with col_hub:
-        if st.button("Overfør til HubSpot", use_container_width=True):
-            data_pakke = {
-                "firma": f.get("navn", "Ukjent"),
-                "organisasjonsnummer": f.get("organisasjonsnummer", ""),
-                "isbryter": st.session_state.get("isbryter"),
-                "bransje": bransje,
-                "ansatte": f.get("antallAnsatte"),
-                "adresse": formater_adresse(f),
-                "nettside": f.get("hjemmeside"),
-                "eposter": ", ".join(eposter),
-            }
-            requests.post(zapier_mottaker, json=data_pakke)
-            st.success("Overfort til HubSpot")
+        col_hub, col_space = st.columns([1, 2])
+        with col_hub:
+            if st.button("Overfør til HubSpot", use_container_width=True):
+                data_pakke = {
+                    "firma": f.get("navn", "Ukjent"),
+                    "organisasjonsnummer": f.get("organisasjonsnummer", ""),
+                    "isbryter": st.session_state.get("isbryter"),
+                    "bransje": bransje,
+                    "ansatte": f.get("antallAnsatte"),
+                    "adresse": formater_adresse(f),
+                    "nettside": f.get("hjemmeside"),
+                    "eposter": ", ".join(eposter),
+                }
+                requests.post(zapier_mottaker, json=data_pakke)
+                st.success("Overfort til HubSpot")
 
     # Analyse-kort
     isbryter = st.session_state.get("isbryter")
