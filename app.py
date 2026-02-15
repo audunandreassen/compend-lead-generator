@@ -256,6 +256,24 @@ def bruk_stil():
             border-radius: 8px;
         }
 
+        /* --- Spinner / loading --- */
+        .stSpinner > div {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+        }
+
+        .stSpinner > div > div {
+            border-top-color: #368373 !important;
+        }
+
+        .stSpinner > div > span {
+            color: #003642 !important;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
         /* --- Skjul Streamlit-elementer --- */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
@@ -421,12 +439,14 @@ with col_m:
 
 # Automatisk analyse ved direkte orgnr-innskriving
 if (org_input != st.session_state.forrige_sok and len(org_input) == 9):
-    utfor_analyse(org_input)
+    with st.spinner("Analyserer selskap..."):
+        utfor_analyse(org_input)
     st.rerun()
 
 # Manuell analyse-knapp
 if start_knapp:
-    utfor_analyse(org_input)
+    with st.spinner("Analyserer selskap..."):
+        utfor_analyse(org_input)
     st.rerun()
 
 # --- VISNING ---
@@ -452,7 +472,6 @@ if st.session_state.hoved_firma:
 
     col_hub, col_space = st.columns([1, 2])
     with col_hub:
-        st.markdown('<div class="hubspot-btn">', unsafe_allow_html=True)
         if st.button("Overfør til HubSpot", use_container_width=True):
             data_pakke = {
                 "firma": f.get("navn", "Ukjent"),
@@ -466,7 +485,6 @@ if st.session_state.hoved_firma:
             }
             requests.post(zapier_mottaker, json=data_pakke)
             st.success("Overfort til HubSpot")
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # Analyse-kort
     isbryter = st.session_state.get("isbryter")
@@ -499,6 +517,7 @@ if st.session_state.hoved_firma:
             with col_b:
                 if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
                     st.session_state.soke_felt = lead["organisasjonsnummer"]
-                    utfor_analyse(lead["organisasjonsnummer"])
+                    with st.spinner("Analyserer..."):
+                        utfor_analyse(lead["organisasjonsnummer"])
                     st.rerun()
 
