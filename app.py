@@ -6,7 +6,7 @@ import pandas as pd
 from duckduckgo_search import DDGS
 from openai import OpenAI
 from io import BytesIO
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 from datetime import datetime, timezone
 
 # Konfigurasjon
