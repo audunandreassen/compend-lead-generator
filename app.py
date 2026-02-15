@@ -161,20 +161,7 @@ def bruk_stil():
             font-weight: 600;
         }
 
-        /* --- Lead-kort --- */
-        .lead-kort {
-            background: #ffffff;
-            border-radius: 10px;
-            padding: 1rem 1.4rem;
-            border: 1px solid #e0e7ec;
-            margin-bottom: 0.5rem;
-            transition: all 0.15s ease;
-        }
-
-        .lead-kort:hover {
-            border-color: #368373;
-            box-shadow: 0 2px 8px rgba(54, 131, 115, 0.1);
-        }
+        /* --- Lead-kort (st.container med border) --- */
 
         .lead-navn {
             font-weight: 600;
@@ -459,6 +446,7 @@ if st.session_state.hoved_firma:
     {epost_html}
 </div>""", unsafe_allow_html=True)
 
+        st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_hub, col_space = st.columns([1, 2])
         with col_hub:
             if st.button("Overfør til HubSpot", use_container_width=True):
@@ -494,19 +482,15 @@ if st.session_state.hoved_firma:
             ansatte = lead.get('antallAnsatte', 0)
             nettside_tekst = f" &middot; {nettside}" if nettside else ""
 
-            col_a, col_b = st.columns([5, 1])
-            with col_a:
-                st.markdown(f"""
-                    <div class="lead-kort">
-                        <span class="lead-navn">{lead['navn']}</span>
-                        <span class="lead-ansatte">{ansatte} ansatte</span>
-                        <div class="lead-info">{poststed}{nettside_tekst}</div>
-                    </div>
-                """, unsafe_allow_html=True)
-            with col_b:
-                if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}"):
-                    st.session_state.soke_felt = lead["organisasjonsnummer"]
-                    with st.spinner("Analyserer..."):
-                        utfor_analyse(lead["organisasjonsnummer"])
-                    st.rerun()
+            with st.container(border=True):
+                st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
+<span class="lead-ansatte">{ansatte} ansatte</span>
+<div class="lead-info">{poststed}{nettside_tekst}</div>""", unsafe_allow_html=True)
+                col_a, col_b = st.columns([3, 1])
+                with col_b:
+                    if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
+                        st.session_state.soke_felt = lead["organisasjonsnummer"]
+                        with st.spinner("Analyserer..."):
+                            utfor_analyse(lead["organisasjonsnummer"])
+                        st.rerun()
 
