@@ -9,7 +9,18 @@ from io import BytesIO
 # Konfigurasjon
 brreg_adresse = "https://data.brreg.no/enhetsregisteret/api/enheter"
 zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
-klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+
+def hent_secret(nokkel):
+    try:
+        return st.secrets[nokkel]
+    except Exception:
+        return None
+
+
+openai_api_key = hent_secret("OPENAI_API_KEY")
+hunter_api_key = hent_secret("HUNTER_API_KEY")
+klient = OpenAI(api_key=openai_api_key) if openai_api_key else None
 modell_navn = "gpt-4o-mini"
 
 # --- DESIGN OG STYLING ---
@@ -314,6 +325,9 @@ def finn_nyheter(firmanavn):
         return ""
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
+    if not klient:
+        return "Legg inn OPENAI_API_KEY i secrets for AI-analyse."
+
     prompt = f"""
     Du er en salgsstrateg for Compend (www.compend.no). 
     Compend leverer plattformer for kurs, opplæring og kompetanseutvikling (LMS).
@@ -345,7 +359,7 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
         return "Kunne ikke generere analyse."
 
 def finn_eposter(domene):
-    if not domene:
+    if not domene or not hunter_api_key:
         return []
     rent_domene = (
         domene.replace("https://", "")
@@ -358,7 +372,7 @@ def finn_eposter(domene):
             "https://api.hunter.io/v2/domain-search",
             params={
                 "domain": rent_domene,
-                "api_key": st.secrets["HUNTER_API_KEY"],
+                "api_key": hunter_api_key,
                 "limit": 5,
             },
         )
