@@ -284,7 +284,25 @@ if st.session_state.get("scroll_to_top", False):
     st.components.v1.html(
         """
         <script>
-        window.parent.document.querySelector('section.main').scrollTo({top: 0, behavior: 'instant'});
+        function tryScroll() {
+            try {
+                var w = window;
+                while (w !== w.parent) {
+                    try {
+                        w = w.parent;
+                        w.scrollTo(0, 0);
+                        var els = w.document.querySelectorAll(
+                            'section.main, [data-testid="stAppViewContainer"], ' +
+                            '[data-testid="ScrollToBottomContainer"], .main, .stApp'
+                        );
+                        els.forEach(function(el) { el.scrollTop = 0; });
+                    } catch(e) { break; }
+                }
+            } catch(e) {}
+        }
+        tryScroll();
+        setTimeout(tryScroll, 150);
+        setTimeout(tryScroll, 500);
         </script>
         """,
         height=0,
