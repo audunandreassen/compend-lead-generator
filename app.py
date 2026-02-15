@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 import requests
 import pandas as pd
+import html
 from duckduckgo_search import DDGS
 from openai import OpenAI
 from io import BytesIO
@@ -621,6 +622,18 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def lag_url_lenke(url, etikett=None):
+    if not url:
+        return ""
+
+    url_tekst = url.strip()
+    if not url_tekst:
+        return ""
+
+    href = url_tekst if url_tekst.startswith(("http://", "https://")) else f"https://{url_tekst}"
+    visning = etikett or url_tekst
+    return f'<a href="{html.escape(href, quote=True)}" target="_blank" rel="noopener noreferrer">{html.escape(visning)}</a>'
+
 def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
     eposter = eposter or []
     adresse = firma.get("forretningsadresse", {})
@@ -997,9 +1010,9 @@ if st.session_state.hoved_firma:
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
     nettside_kilde = st.session_state.get("nettside_kilde", "")
     nettside = st.session_state.get("nettside_url") or f.get("hjemmeside", "")
-    nettside_visning = nettside if nettside else "Ikke oppgitt"
+    nettside_visning = lag_url_lenke(nettside) if nettside else "Ikke oppgitt"
     if nettside and nettside_kilde == "fallback":
-        nettside_visning = f"{nettside} (fallback)"
+        nettside_visning = f"{lag_url_lenke(nettside)} (fallback)"
 
     hoved_validering = st.session_state.get("hoved_nettside_validering") or hent_validering_fra_cache(nettside)
     valideringsstatus = valideringsstatus_tekst(hoved_validering.get("status"))
@@ -1097,7 +1110,7 @@ if st.session_state.hoved_firma:
             poststed = lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')
             nettside = lead.get('hjemmeside', '')
             ansatte = lead.get('antallAnsatte', 0)
-            nettside_tekst = f" &middot; {nettside}" if nettside else ""
+            nettside_tekst = f" &middot; {lag_url_lenke(nettside)}" if nettside else ""
 
             with st.container(border=True):
                 st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
