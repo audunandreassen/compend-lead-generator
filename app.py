@@ -527,9 +527,13 @@ if "brreg_roller_cache" not in st.session_state:
     st.session_state.brreg_roller_cache = {}
 if "vis_vent_modal" not in st.session_state:
     st.session_state.vis_vent_modal = False
+if "har_analysert_tidligere" not in st.session_state:
+    st.session_state.har_analysert_tidligere = False
 
 if st.session_state.vis_vent_modal:
     vis_vent_modal()
+else:
+    skjul_vent_modal()
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -1396,6 +1400,7 @@ def utfor_analyse(orgnr):
         hoved = berik_firma_med_kontaktinfo(hoved)
         st.session_state.hoved_firma = hoved
         st.session_state.forrige_sok = orgnr
+        st.session_state.har_analysert_tidligere = True
         firmanavn = hoved.get("navn", "Ukjent")
 
         registrert_hjemmeside = hoved.get("hjemmeside", "")
@@ -1514,15 +1519,19 @@ with col_m:
 if st.session_state.auto_analyse_orgnr:
     orgnr = st.session_state.auto_analyse_orgnr
     st.session_state.auto_analyse_orgnr = None
+    hadde_analysert_tidligere = st.session_state.har_analysert_tidligere
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(orgnr)
-    st.session_state.scroll_topp = True
+    st.session_state.scroll_topp = hadde_analysert_tidligere
+    st.session_state.vis_vent_modal = False
     st.rerun()
 
 if valgt and valgt != st.session_state.forrige_sok:
+    hadde_analysert_tidligere = st.session_state.har_analysert_tidligere
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(valgt)
-    st.session_state.scroll_topp = True
+    st.session_state.scroll_topp = hadde_analysert_tidligere
+    st.session_state.vis_vent_modal = False
     st.rerun()
 
 # --- VISNING ---
@@ -1719,7 +1728,3 @@ if st.session_state.hoved_firma:
 if st.session_state.scroll_topp:
     st.session_state.scroll_topp = False
     scroll_til_toppen()
-
-if st.session_state.vis_vent_modal and not st.session_state.auto_analyse_orgnr:
-    skjul_vent_modal()
-    st.session_state.vis_vent_modal = False
