@@ -421,6 +421,7 @@ bruk_stil()
 
 # Header
 st.markdown("""
+    <div id="compend-top" style="height:0;margin:0;padding:0;"></div>
     <div class="app-header">
         <h1>Compend Insights</h1>
         <p>Finn, analyser og kvalifiser nye leads</p>
@@ -1228,39 +1229,85 @@ def oppdater_scorecards_med_ny_data():
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
+    # Diagnostic version: shows visible debug output so we can see
+    # what's happening with JS execution and parent document access.
     components.html(
         """
+        <div id="scroll-debug" style="font-family:monospace;font-size:12px;color:#333;padding:4px;"></div>
         <script>
-            function scrollToTop() {
+        (function() {
+            var out = document.getElementById('scroll-debug');
+            var log = function(msg) { out.innerText += msg + '\\n'; };
+
+            log('1. Script running');
+
+            var doc;
+            try {
+                doc = window.parent.document;
+                log('2. parent.document OK - ' + doc.querySelectorAll('*').length + ' elements');
+            } catch(e) {
+                log('2. parent.document BLOCKED: ' + e.message);
                 try {
-                    var doc = window.parent.document;
-                    var targets = [
-                        doc.querySelector('[data-testid="stAppViewContainer"]'),
-                        doc.querySelector('section.main'),
-                        doc.querySelector('.main'),
-                        doc.querySelector('main'),
-                        doc.body,
-                        doc.documentElement
-                    ];
-                    for (var i = 0; i < targets.length; i++) {
-                        if (targets[i]) {
-                            targets[i].scrollTop = 0;
-                        }
+                    doc = window.top.document;
+                    log('2b. top.document OK');
+                } catch(e2) {
+                    log('2b. top.document BLOCKED: ' + e2.message);
+                    return;
+                }
+            }
+
+            // Find scrolled elements
+            var all = doc.querySelectorAll('*');
+            var scrolled = [];
+            for (var i = 0; i < all.length; i++) {
+                try {
+                    if (all[i].scrollTop > 0) {
+                        scrolled.push(all[i].tagName + '.' + (all[i].className||'').substring(0,30) + '=' + all[i].scrollTop);
                     }
-                    window.parent.scrollTo(0, 0);
                 } catch(e) {}
             }
-            // Fire immediately and then repeatedly with increasing delays
-            // to ensure we catch the moment after Streamlit finishes rendering
-            scrollToTop();
-            requestAnimationFrame(scrollToTop);
-            var delays = [50, 100, 200, 300, 500, 800, 1200];
-            for (var d = 0; d < delays.length; d++) {
-                setTimeout(scrollToTop, delays[d]);
+            log('3. Scrolled elements: ' + (scrolled.length > 0 ? scrolled.join(' | ') : 'NONE FOUND'));
+
+            // Try scrollIntoView on anchor
+            var anchor = doc.getElementById('compend-top');
+            log('4. Anchor #compend-top: ' + (anchor ? 'FOUND' : 'NOT FOUND'));
+
+            // Attempt scroll
+            if (anchor) {
+                try {
+                    anchor.scrollIntoView({behavior:'instant',block:'start'});
+                    log('5. scrollIntoView called');
+                } catch(e) {
+                    log('5. scrollIntoView ERROR: ' + e.message);
+                }
             }
+            for (var i = 0; i < scrolled.length; i++) {
+                // already logged, now reset
+            }
+            var all2 = doc.querySelectorAll('*');
+            for (var i = 0; i < all2.length; i++) {
+                try { if (all2[i].scrollTop > 0) all2[i].scrollTop = 0; } catch(e) {}
+            }
+            try { window.parent.scrollTo(0, 0); } catch(e) {}
+            log('6. Scroll reset attempted');
+
+            // Check after 500ms if scroll stuck
+            setTimeout(function() {
+                var still = [];
+                var a = doc.querySelectorAll('*');
+                for (var i = 0; i < a.length; i++) {
+                    try {
+                        if (a[i].scrollTop > 0) {
+                            still.push(a[i].tagName + '.' + (a[i].className||'').substring(0,30) + '=' + a[i].scrollTop);
+                        }
+                    } catch(e) {}
+                }
+                log('7. After 500ms, scrolled: ' + (still.length > 0 ? still.join(' | ') : 'NONE (scroll worked!)'));
+            }, 500);
+        })();
         </script>
         """,
-        height=0,
+        height=150,
     )
 
 def utfor_analyse(orgnr):
@@ -1588,6 +1635,8 @@ if st.session_state.hoved_firma:
                         st.rerun()
 
 # --- SCROLL TIL TOPPEN (plassert etter alt innhold er rendret) ---
+st.write(f"DEBUG scroll_topp = {st.session_state.scroll_topp}, auto_analyse = {st.session_state.auto_analyse_orgnr}")
 if st.session_state.scroll_topp:
+    st.write("DEBUG: scroll_til_toppen() KALLES NÅ")
     st.session_state.scroll_topp = False
     scroll_til_toppen()
