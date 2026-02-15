@@ -427,112 +427,6 @@ def scroll_til_toppen():
         height=0,
     )
 
-
-def bygg_leadscore(lead, hoved_firma):
-    lead_bransje = lead.get("naeringskode1", {}).get("kode", "")
-    hoved_bransje = (hoved_firma or {}).get("naeringskode1", {}).get("kode", "")
-    ansatte = lead.get("antallAnsatte") or 0
-    nettside = bool(lead.get("hjemmeside"))
-    poststed = lead.get("forretningsadresse", {}).get("poststed")
-
-    passformscore = 35
-    passform_grunner = []
-
-    if lead_bransje and hoved_bransje and lead_bransje == hoved_bransje:
-        passformscore += 35
-        passform_grunner.append("Samme næringskode som selskapet du analyserer nå.")
-    elif lead_bransje[:2] and hoved_bransje[:2] and lead_bransje[:2] == hoved_bransje[:2]:
-        passformscore += 20
-        passform_grunner.append("Ligger i samme hovedbransje, som ofte betyr lignende opplæringsbehov.")
-
-    if 20 <= ansatte <= 500:
-        passformscore += 20
-        passform_grunner.append("Ansattstørrelse matcher typiske selskaper med behov for strukturert kompetanseløft.")
-    elif ansatte > 500:
-        passformscore += 12
-        passform_grunner.append("Størrelsen indikerer komplekse onboarding- og opplæringsløp.")
-    elif ansatte >= 5:
-        passformscore += 10
-        passform_grunner.append("Har nok ansatte til at et LMS kan gi tydelig effekt.")
-
-    if nettside:
-        passformscore += 10
-        passform_grunner.append("Aktiv nettside gjør det enklere å kvalifisere behov og kontakte riktig person.")
-
-    passformscore = max(0, min(100, passformscore))
-    while len(passform_grunner) < 3:
-        passform_grunner.append("Bransje- og selskapsdata tilsier relevant match for Compend.")
-
-    intentscore = 25
-    intent_grunner = []
-
-    if ansatte >= 100:
-        intentscore += 25
-        intent_grunner.append("Større organisasjon har oftere kontinuerlig behov for opplæring og intern skalering.")
-    elif ansatte >= 20:
-        intentscore += 18
-        intent_grunner.append("Mellomstor organisasjon er ofte i fase for standardisering av kompetansearbeid.")
-    elif ansatte >= 5:
-        intentscore += 10
-        intent_grunner.append("Vekst i antall ansatte kan skape behov for bedre onboardingflyt.")
-
-    if poststed and hoved_firma:
-        hoved_poststed = hoved_firma.get("forretningsadresse", {}).get("poststed")
-        if hoved_poststed and poststed == hoved_poststed:
-            intentscore += 15
-            intent_grunner.append("Samme geografiske område som nåværende analyse gjør rask oppfølging enklere.")
-
-    if nettside:
-        intentscore += 10
-        intent_grunner.append("Digital tilstedeværelse tyder på lavere terskel for å ta i bruk nye verktøy.")
-
-    if lead_bransje and hoved_bransje and lead_bransje == hoved_bransje:
-        intentscore += 15
-        intent_grunner.append("Lik bransjekontekst gir sterkere sannsynlighet for tilsvarende utfordringer akkurat nå.")
-
-    intentscore = max(0, min(100, intentscore))
-    while len(intent_grunner) < 3:
-        intent_grunner.append("Datapunktene peker på et relevant kjøpssignal den kommende perioden.")
-
-    neste_steg = "Anbefalt neste steg: kontakt HR-/kompetanseansvarlig med forslag til kort workshop om onboarding og læringsløp."
-    hvorfor_na = [
-        f"Dette selskapet har høy relevans nå fordi de ligner hovedcaset ditt i bransje og størrelse.",
-        f"Passformscore {passformscore}/100 og intentscore {intentscore}/100 indikerer både god match og sannsynlig kjøpsvindu.",
-        f"{neste_steg}",
-    ]
-
-    return {
-        "passformscore": passformscore,
-        "passform_grunner": passform_grunner[:3],
-        "intentscore": intentscore,
-        "intent_grunner": intent_grunner[:3],
-        "hvorfor_na": "\n".join(hvorfor_na),
-    }
-
-
-def bygg_leadscore_sikkert(lead, hoved_firma):
-    score_funksjon = globals().get("bygg_leadscore")
-    if callable(score_funksjon):
-        return score_funksjon(lead, hoved_firma)
-
-    fallback = {
-        "passformscore": 50,
-        "passform_grunner": [
-            "Lead-data tilsier grunnleggende match for målgruppen.",
-            "Selskapsstørrelse og bransje bør kvalifiseres nærmere.",
-            "Videre avklaring kan gjøres i første møte.",
-        ],
-        "intentscore": 45,
-        "intent_grunner": [
-            "Tilgjengelige data gir et moderat kjøpssignal.",
-            "Selskapet har synlige kjennetegn på mulig behov.",
-            "Rask oppfølging anbefales for å verifisere timing.",
-        ],
-        "hvorfor_na": "Dette er en aktuell lead basert på tilgjengelige data.\nAnbefalt neste steg: ta en kort behovsavklaring med HR-/kompetanseansvarlig.",
-    }
-    return fallback
-
-
 def utfor_analyse(orgnr):
     hoved = hent_firma_data(orgnr)
     if hoved:
@@ -688,7 +582,7 @@ if st.session_state.hoved_firma:
 <span class="lead-ansatte">{ansatte} ansatte</span>
 <div class="lead-info">{poststed}{nettside_tekst}</div>""", unsafe_allow_html=True)
 
-                scoredata = bygg_leadscore_sikkert(lead, st.session_state.hoved_firma)
+                scoredata = bygg_leadscore(lead, st.session_state.hoved_firma)
                 hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
                 st.markdown(f"""<div class="lead-why-now">{hvorfor_na_html}</div>""", unsafe_allow_html=True)
 
