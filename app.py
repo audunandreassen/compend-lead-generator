@@ -100,7 +100,7 @@ def hent_datakvalitet_label(score):
     }
 
 
-def vis_vent_modal(varighet_ms=2000):
+def vis_vent_modal(varighet_ms=None):
     components.html(
         f"""
         <script>
@@ -147,9 +147,27 @@ def vis_vent_modal(varighet_ms=2000):
             }}
 
             modal.style.display = "flex";
-            window.setTimeout(() => {{
+            const varighet = {"null" if varighet_ms is None else varighet_ms};
+            if (varighet !== null) {{
+                window.setTimeout(() => {{
+                    modal.remove();
+                }}, varighet);
+            }}
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+
+def skjul_vent_modal():
+    components.html(
+        """
+        <script>
+            const modal = window.parent.document.getElementById("compend-vent-modal");
+            if (modal) {
                 modal.remove();
-            }}, {varighet_ms});
+            }
         </script>
         """,
         height=0,
@@ -512,7 +530,6 @@ if "vis_vent_modal" not in st.session_state:
 
 if st.session_state.vis_vent_modal:
     vis_vent_modal()
-    st.session_state.vis_vent_modal = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -1702,3 +1719,7 @@ if st.session_state.hoved_firma:
 if st.session_state.scroll_topp:
     st.session_state.scroll_topp = False
     scroll_til_toppen()
+
+if st.session_state.vis_vent_modal and not st.session_state.auto_analyse_orgnr:
+    skjul_vent_modal()
+    st.session_state.vis_vent_modal = False
