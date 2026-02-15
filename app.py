@@ -1644,7 +1644,7 @@ if st.session_state.hoved_firma:
                     "eposter": ", ".join(eposter),
                 }
                 requests.post(zapier_mottaker, json=data_pakke)
-                st.success("Overfort til HubSpot")
+                st.success("Sendt til HubSpot")
     
     if st.session_state.mine_leads:
         st.markdown('<div class="seksjon-header">Lignende aktører</div>', unsafe_allow_html=True)
