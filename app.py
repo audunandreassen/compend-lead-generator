@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 import requests
 import pandas as pd
@@ -188,6 +189,48 @@ def bruk_stil():
             margin-left: 8px;
         }
 
+        .lead-why-now {
+            margin-top: 0.7rem;
+            font-size: 0.82rem;
+            color: #23444d;
+            line-height: 1.55;
+            background: #f7fbfa;
+            border: 1px solid #e0ece8;
+            border-radius: 8px;
+            padding: 0.7rem 0.8rem;
+        }
+
+        .score-kort {
+            margin-top: 0.6rem;
+            border: 1px solid #e0e7ec;
+            border-radius: 8px;
+            padding: 0.6rem 0.75rem;
+            background: #ffffff;
+        }
+
+        .score-kort .score-title {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b8a93;
+            font-weight: 600;
+        }
+
+        .score-kort .score-value {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #003642;
+            margin: 0.1rem 0 0.35rem 0;
+        }
+
+        .score-kort ul {
+            margin: 0;
+            padding-left: 1rem;
+            color: #37535b;
+            font-size: 0.8rem;
+            line-height: 1.45;
+        }
+
         /* --- Header --- */
         .app-header {
             text-align: center;
@@ -282,6 +325,10 @@ if "soke_felt" not in st.session_state:
     st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
+if "auto_analyse_orgnr" not in st.session_state:
+    st.session_state.auto_analyse_orgnr = None
+if "scroll_topp" not in st.session_state:
+    st.session_state.scroll_topp = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -370,6 +417,122 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def scroll_til_toppen():
+    components.html(
+        """
+        <script>
+            window.parent.scrollTo({ top: 0, behavior: "smooth" });
+        </script>
+        """,
+        height=0,
+    )
+
+
+def bygg_leadscore(lead, hoved_firma):
+    lead_bransje = lead.get("naeringskode1", {}).get("kode", "")
+    hoved_bransje = (hoved_firma or {}).get("naeringskode1", {}).get("kode", "")
+    ansatte = lead.get("antallAnsatte") or 0
+    nettside = bool(lead.get("hjemmeside"))
+    poststed = lead.get("forretningsadresse", {}).get("poststed")
+
+    passformscore = 35
+    passform_grunner = []
+
+    if lead_bransje and hoved_bransje and lead_bransje == hoved_bransje:
+        passformscore += 35
+        passform_grunner.append("Samme næringskode som selskapet du analyserer nå.")
+    elif lead_bransje[:2] and hoved_bransje[:2] and lead_bransje[:2] == hoved_bransje[:2]:
+        passformscore += 20
+        passform_grunner.append("Ligger i samme hovedbransje, som ofte betyr lignende opplæringsbehov.")
+
+    if 20 <= ansatte <= 500:
+        passformscore += 20
+        passform_grunner.append("Ansattstørrelse matcher typiske selskaper med behov for strukturert kompetanseløft.")
+    elif ansatte > 500:
+        passformscore += 12
+        passform_grunner.append("Størrelsen indikerer komplekse onboarding- og opplæringsløp.")
+    elif ansatte >= 5:
+        passformscore += 10
+        passform_grunner.append("Har nok ansatte til at et LMS kan gi tydelig effekt.")
+
+    if nettside:
+        passformscore += 10
+        passform_grunner.append("Aktiv nettside gjør det enklere å kvalifisere behov og kontakte riktig person.")
+
+    passformscore = max(0, min(100, passformscore))
+    while len(passform_grunner) < 3:
+        passform_grunner.append("Bransje- og selskapsdata tilsier relevant match for Compend.")
+
+    intentscore = 25
+    intent_grunner = []
+
+    if ansatte >= 100:
+        intentscore += 25
+        intent_grunner.append("Større organisasjon har oftere kontinuerlig behov for opplæring og intern skalering.")
+    elif ansatte >= 20:
+        intentscore += 18
+        intent_grunner.append("Mellomstor organisasjon er ofte i fase for standardisering av kompetansearbeid.")
+    elif ansatte >= 5:
+        intentscore += 10
+        intent_grunner.append("Vekst i antall ansatte kan skape behov for bedre onboardingflyt.")
+
+    if poststed and hoved_firma:
+        hoved_poststed = hoved_firma.get("forretningsadresse", {}).get("poststed")
+        if hoved_poststed and poststed == hoved_poststed:
+            intentscore += 15
+            intent_grunner.append("Samme geografiske område som nåværende analyse gjør rask oppfølging enklere.")
+
+    if nettside:
+        intentscore += 10
+        intent_grunner.append("Digital tilstedeværelse tyder på lavere terskel for å ta i bruk nye verktøy.")
+
+    if lead_bransje and hoved_bransje and lead_bransje == hoved_bransje:
+        intentscore += 15
+        intent_grunner.append("Lik bransjekontekst gir sterkere sannsynlighet for tilsvarende utfordringer akkurat nå.")
+
+    intentscore = max(0, min(100, intentscore))
+    while len(intent_grunner) < 3:
+        intent_grunner.append("Datapunktene peker på et relevant kjøpssignal den kommende perioden.")
+
+    neste_steg = "Anbefalt neste steg: kontakt HR-/kompetanseansvarlig med forslag til kort workshop om onboarding og læringsløp."
+    hvorfor_na = [
+        f"Dette selskapet har høy relevans nå fordi de ligner hovedcaset ditt i bransje og størrelse.",
+        f"Passformscore {passformscore}/100 og intentscore {intentscore}/100 indikerer både god match og sannsynlig kjøpsvindu.",
+        f"{neste_steg}",
+    ]
+
+    return {
+        "passformscore": passformscore,
+        "passform_grunner": passform_grunner[:3],
+        "intentscore": intentscore,
+        "intent_grunner": intent_grunner[:3],
+        "hvorfor_na": "\n".join(hvorfor_na),
+    }
+
+
+def bygg_leadscore_sikkert(lead, hoved_firma):
+    score_funksjon = globals().get("bygg_leadscore")
+    if callable(score_funksjon):
+        return score_funksjon(lead, hoved_firma)
+
+    fallback = {
+        "passformscore": 50,
+        "passform_grunner": [
+            "Lead-data tilsier grunnleggende match for målgruppen.",
+            "Selskapsstørrelse og bransje bør kvalifiseres nærmere.",
+            "Videre avklaring kan gjøres i første møte.",
+        ],
+        "intentscore": 45,
+        "intent_grunner": [
+            "Tilgjengelige data gir et moderat kjøpssignal.",
+            "Selskapet har synlige kjennetegn på mulig behov.",
+            "Rask oppfølging anbefales for å verifisere timing.",
+        ],
+        "hvorfor_na": "Dette er en aktuell lead basert på tilgjengelige data.\nAnbefalt neste steg: ta en kort behovsavklaring med HR-/kompetanseansvarlig.",
+    }
+    return fallback
+
+
 def utfor_analyse(orgnr):
     hoved = hent_firma_data(orgnr)
     if hoved:
@@ -443,14 +606,28 @@ with col_m:
     valgt = st_searchbox(
         sok_brreg,
         placeholder="Selskapsnavn eller organisasjonsnummer",
+        default_searchterm=st.session_state.soke_felt,
         clear_on_submit=True,
         key="brreg_sok",
     )
 
+if st.session_state.auto_analyse_orgnr:
+    orgnr = st.session_state.auto_analyse_orgnr
+    st.session_state.auto_analyse_orgnr = None
+    with st.spinner("Analyserer selskap..."):
+        utfor_analyse(orgnr)
+    st.session_state.scroll_topp = True
+    st.rerun()
+
 if valgt and valgt != st.session_state.forrige_sok:
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(valgt)
+    st.session_state.scroll_topp = True
     st.rerun()
+
+if st.session_state.scroll_topp:
+    scroll_til_toppen()
+    st.session_state.scroll_topp = False
 
 # --- VISNING ---
 if st.session_state.hoved_firma:
@@ -510,10 +687,42 @@ if st.session_state.hoved_firma:
                 st.markdown(f"""<span class="lead-navn">{lead['navn']}</span>
 <span class="lead-ansatte">{ansatte} ansatte</span>
 <div class="lead-info">{poststed}{nettside_tekst}</div>""", unsafe_allow_html=True)
+
+                scoredata = bygg_leadscore_sikkert(lead, st.session_state.hoved_firma)
+                hvorfor_na_html = scoredata["hvorfor_na"].replace("\n", "<br>")
+                st.markdown(f"""<div class="lead-why-now">{hvorfor_na_html}</div>""", unsafe_allow_html=True)
+
+                col_pf, col_int = st.columns(2)
+                with col_pf:
+                    st.markdown(f"""
+                    <div class="score-kort">
+                        <div class="score-title">Passformscore</div>
+                        <div class="score-value">{scoredata['passformscore']}/100</div>
+                        <ul>
+                            <li>{scoredata['passform_grunner'][0]}</li>
+                            <li>{scoredata['passform_grunner'][1]}</li>
+                            <li>{scoredata['passform_grunner'][2]}</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_int:
+                    st.markdown(f"""
+                    <div class="score-kort">
+                        <div class="score-title">Intentscore</div>
+                        <div class="score-value">{scoredata['intentscore']}/100</div>
+                        <ul>
+                            <li>{scoredata['intent_grunner'][0]}</li>
+                            <li>{scoredata['intent_grunner'][1]}</li>
+                            <li>{scoredata['intent_grunner'][2]}</li>
+                        </ul>
+                    </div>
+                    """, unsafe_allow_html=True)
+
                 col_a, col_b = st.columns([3, 1])
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
-                        with st.spinner("Analyserer..."):
-                            utfor_analyse(lead["organisasjonsnummer"])
+                        st.session_state.auto_analyse_orgnr = lead["organisasjonsnummer"]
+                        if "brreg_sok" in st.session_state:
+                            del st.session_state["brreg_sok"]
                         st.rerun()
