@@ -1016,6 +1016,15 @@ if st.session_state.hoved_firma:
     {epost_html}
 </div>""", unsafe_allow_html=True)
 
+        isbryter = st.session_state.get("isbryter")
+        if isbryter:
+            st.markdown(f"""
+                <div class="analyse-kort">
+                    <div class="analyse-label">AI-analyse</div>
+                    {isbryter}
+                </div>
+            """, unsafe_allow_html=True)
+
         hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_h_pf, col_h_int, col_h_dk = st.columns(3)
@@ -1080,16 +1089,6 @@ if st.session_state.hoved_firma:
                 }
                 requests.post(zapier_mottaker, json=data_pakke)
                 st.success("Overfort til HubSpot")
-
-    # Analyse-kort
-    isbryter = st.session_state.get("isbryter")
-    if isbryter:
-        st.markdown(f"""
-            <div class="analyse-kort">
-                <div class="analyse-label">AI-analyse</div>
-                {isbryter}
-            </div>
-        """, unsafe_allow_html=True)
     
     if st.session_state.mine_leads:
         st.markdown('<div class="seksjon-header">Andre aktorer i bransjen</div>', unsafe_allow_html=True)
