@@ -876,6 +876,8 @@ def lag_url_lenke(url, etikett=None):
 
 def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
     eposter = eposter or []
+    kontaktinfo = hent_kontaktinfo_fra_firma(firma)
+    har_daglig_leder = bool((firma or {}).get("daglig_leder") and (firma or {}).get("daglig_leder") != "Ikke oppgitt")
     adresse = firma.get("forretningsadresse", {})
     nettside = firma.get("hjemmeside") or ""
     nettside_status = bool(verifiser_nettside(nettside) or normaliser_nettside_url(nettside))
@@ -888,25 +890,36 @@ def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
     }
     adresse_dekning = sum(adresse_felt.values())
 
+    kontaktpunkter = 0
+    kontaktpunkter += min(2, len([e for e in eposter if e]))
+    kontaktpunkter += 1 if kontaktinfo.get("epost") else 0
+    kontaktpunkter += 1 if kontaktinfo.get("telefon") else 0
+    kontaktpunkter += 1 if kontaktinfo.get("mobil") else 0
+    kontaktpunkter = min(5, kontaktpunkter)
+
     score = 0
-    score += 30 if nettside_status else 0
+    score += 25 if nettside_status else 0
 
     if adresse_dekning == 4:
-        score += 30
-    elif adresse_dekning == 3:
-        score += 22
-    elif adresse_dekning == 2:
-        score += 15
-    elif adresse_dekning == 1:
-        score += 8
-
-    if len(eposter) >= 2:
         score += 25
-    elif len(eposter) == 1:
+    elif adresse_dekning == 3:
+        score += 19
+    elif adresse_dekning == 2:
+        score += 12
+    elif adresse_dekning == 1:
+        score += 6
+
+    if kontaktpunkter >= 5:
+        score += 30
+    elif kontaktpunkter >= 3:
+        score += 22
+    elif kontaktpunkter >= 2:
         score += 15
+    elif kontaktpunkter >= 1:
+        score += 8
 
     if enrichment_age_timer is None:
-        score += 8
+        score += 6
     elif enrichment_age_timer <= 24:
         score += 15
     elif enrichment_age_timer <= 72:
@@ -915,6 +928,9 @@ def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
         score += 8
     else:
         score += 4
+
+    if har_daglig_leder:
+        score += 5
 
     score = max(0, min(100, score))
     er_lav = score < 50
@@ -933,7 +949,8 @@ def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
         "datakvalitet_grunner": [
             "Nettside-status verifisert." if nettside_status else "Nettside mangler eller er ikke verifisert.",
             f"Adressefelt med verdi: {adresse_dekning}/4.",
-            f"E-postdekning: {len(eposter)} registrerte adresser.",
+            f"Kontaktdekning: {kontaktpunkter}/5 kontaktpunkter (e-post/telefon/mobil).",
+            "Daglig leder identifisert i Brreg-data." if har_daglig_leder else "Daglig leder er ikke identifisert i tilgjengelig data.",
             ferskhet_tekst,
         ],
         "hoy_usikkerhet": er_lav,
@@ -995,7 +1012,20 @@ def bygg_leadscore(lead, hoved_firma):
         f"{geotekst}."
     )
 
-    datakvalitet = bygg_datakvalitet(lead, eposter=[], enrichment_age_timer=0)
+    enrichment_tidspunkt = st.session_state.get("enrichment_tidspunkt")
+    enrichment_age_timer = None
+    if enrichment_tidspunkt:
+        enrichment_age_timer = max(
+            0,
+            (datetime.now(timezone.utc) - enrichment_tidspunkt).total_seconds() / 3600,
+        )
+
+    lead_eposter = []
+    lead_kontakt = hent_kontaktinfo_fra_firma(lead)
+    if lead_kontakt.get("epost"):
+        lead_eposter.append(lead_kontakt.get("epost"))
+
+    datakvalitet = bygg_datakvalitet(lead, eposter=lead_eposter, enrichment_age_timer=enrichment_age_timer)
 
     return {
         "passformscore": passformscore,
@@ -1100,6 +1130,23 @@ def bygg_hovedscore(hoved_firma, leads):
         "datakvalitet_grunner": datakvalitet["datakvalitet_grunner"],
         "hoy_usikkerhet": datakvalitet["hoy_usikkerhet"],
     }
+
+def oppdater_scorecards_med_ny_data():
+    hoved_firma = st.session_state.get("hoved_firma")
+    if not hoved_firma:
+        return
+
+    oppdatert_hoved = berik_firma_med_kontaktinfo(hoved_firma)
+    st.session_state.hoved_firma = oppdatert_hoved
+    st.session_state.hoved_nettside_validering = hent_validering_fra_cache(oppdatert_hoved.get("hjemmeside", ""))
+    st.session_state.eposter = finn_eposter(oppdatert_hoved.get("hjemmeside"), st.session_state.get("nettside_kilde", ""))
+
+    oppdaterte_leads = []
+    for lead in st.session_state.get("mine_leads", []):
+        oppdaterte_leads.append(berik_firma_med_kontaktinfo(lead))
+    st.session_state.mine_leads = oppdaterte_leads
+
+    st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
     components.html(
@@ -1294,6 +1341,12 @@ if st.session_state.hoved_firma:
                 </div>
             """, unsafe_allow_html=True)
 
+        if st.button("Vurder scorecards pa nytt med ny data", use_container_width=True):
+            with st.spinner("Henter ny data og oppdaterer scorecards..."):
+                oppdater_scorecards_med_ny_data()
+            st.success("Scorecards er oppdatert med ny informasjon.")
+            st.rerun()
+
         hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_h_pf, col_h_int, col_h_dk = st.columns(3)
@@ -1335,6 +1388,7 @@ if st.session_state.hoved_firma:
                     <li>{hovedscore['datakvalitet_grunner'][1]}</li>
                     <li>{hovedscore['datakvalitet_grunner'][2]}</li>
                     <li>{hovedscore['datakvalitet_grunner'][3]}</li>
+                    <li>{hovedscore['datakvalitet_grunner'][4]}</li>
                 </ul>
             </div>
             """, unsafe_allow_html=True)
@@ -1418,6 +1472,7 @@ if st.session_state.hoved_firma:
                             <li>{scoredata['datakvalitet_grunner'][1]}</li>
                             <li>{scoredata['datakvalitet_grunner'][2]}</li>
                             <li>{scoredata['datakvalitet_grunner'][3]}</li>
+                            <li>{scoredata['datakvalitet_grunner'][4]}</li>
                         </ul>
                     </div>
                     """, unsafe_allow_html=True)
