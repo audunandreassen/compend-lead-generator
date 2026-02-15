@@ -1230,9 +1230,12 @@ def oppdater_scorecards_med_ny_data():
 
 def scroll_til_toppen():
     # Bruker MutationObserver for å vente til Streamlit er ferdig med å rendre,
-    # og deretter scroller. Gjentatte forsøk etter at DOM stabiliserer seg.
+    # og deretter scroller. Unik nonce hver gang for å unngå Streamlit-caching.
+    import time
+    nonce = int(time.time() * 1000)
     components.html(
-        """
+        f"""
+        <!-- nonce={nonce} -->
         <script>
         (function() {
             var doc;
