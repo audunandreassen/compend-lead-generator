@@ -181,9 +181,10 @@ def utfor_analyse(orgnr):
     if hoved:
         st.session_state.hoved_firma = hoved
         st.session_state.forrige_sok = orgnr
-        nyheter = finn_nyheter(hoved["navn"])
+        firmanavn = hoved.get("navn", "Ukjent")
+        nyheter = finn_nyheter(firmanavn)
         st.session_state.isbryter = lag_isbryter(
-            hoved["navn"],
+            firmanavn,
             nyheter,
             hoved.get("naeringskode1", {}).get("beskrivelse", "Ukjent"),
         )
@@ -244,7 +245,7 @@ if st.session_state.hoved_firma:
     with c3:
         if st.button("Overfør til HubSpot", use_container_width=True):
             data_pakke = {
-                "firma": f["navn"],
+                "firma": f.get("navn", "Ukjent"),
                 "orgnr": f["organisasjonsnummer"],
                 "isbryter": st.session_state.get("isbryter"),
                 "bransje": f.get("naeringskode1", {}).get("beskrivelse"),
