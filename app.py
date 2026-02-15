@@ -1231,7 +1231,19 @@ def scroll_til_toppen():
     components.html(
         """
         <script>
-            window.parent.scrollTo({ top: 0, behavior: "smooth" });
+            const scrollTopNow = () => {
+                window.parent.scrollTo({ top: 0, behavior: "auto" });
+                if (window.parent.document && window.parent.document.documentElement) {
+                    window.parent.document.documentElement.scrollTop = 0;
+                }
+                if (window.parent.document && window.parent.document.body) {
+                    window.parent.document.body.scrollTop = 0;
+                }
+            };
+
+            scrollTopNow();
+            setTimeout(scrollTopNow, 80);
+            requestAnimationFrame(scrollTopNow);
         </script>
         """,
         height=0,
@@ -1559,6 +1571,7 @@ if st.session_state.hoved_firma:
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
+                        st.session_state.scroll_topp = True
                         st.session_state.auto_analyse_orgnr = lead["organisasjonsnummer"]
                         if "brreg_sok" in st.session_state:
                             del st.session_state["brreg_sok"]
