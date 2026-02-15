@@ -417,6 +417,71 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def bygg_leadscore(lead, hoved_firma):
+    lead_ansatte = lead.get("antallAnsatte") or 0
+    hoved_ansatte = hoved_firma.get("antallAnsatte") or 0
+
+    lead_bransjekode = lead.get("naeringskode1", {}).get("kode")
+    hoved_bransjekode = hoved_firma.get("naeringskode1", {}).get("kode")
+    samme_bransje = bool(lead_bransjekode and lead_bransjekode == hoved_bransjekode)
+
+    lead_kommune = lead.get("forretningsadresse", {}).get("kommunenummer")
+    hoved_kommune = hoved_firma.get("forretningsadresse", {}).get("kommunenummer")
+    samme_kommune = bool(lead_kommune and lead_kommune == hoved_kommune)
+
+    nettside = lead.get("hjemmeside") or ""
+
+    # Passformscore: hvor godt leadet matcher hovedselskapet i størrelse og segment
+    passformscore = 35
+    if samme_bransje:
+        passformscore += 35
+    if lead_ansatte >= 20:
+        passformscore += 15
+    if abs(lead_ansatte - hoved_ansatte) <= 50:
+        passformscore += 10
+    if nettside:
+        passformscore += 5
+    passformscore = max(0, min(100, passformscore))
+
+    # Intentscore: sannsynlighet for at timing er riktig
+    intentscore = 30
+    if lead_ansatte >= 50:
+        intentscore += 20
+    elif lead_ansatte >= 20:
+        intentscore += 10
+    if samme_kommune:
+        intentscore += 15
+    if nettside:
+        intentscore += 10
+    if lead_ansatte > hoved_ansatte:
+        intentscore += 10
+    intentscore = max(0, min(100, intentscore))
+
+    bransjetekst = "Samme bransjekode som valgt selskap" if samme_bransje else "Nærliggende bransje med lignende opplæringsbehov"
+    geotekst = "Lokalt selskap i samme kommune" if samme_kommune else "Kan prioriteres nasjonalt ved kapasitetsbehov"
+
+    hvorfor_na = (
+        f"{lead.get('navn', 'Selskapet')} har {lead_ansatte} ansatte"
+        " og kan ha behov for strukturert onboarding og kompetanseheving. "
+        f"{geotekst}."
+    )
+
+    return {
+        "passformscore": passformscore,
+        "intentscore": intentscore,
+        "passform_grunner": [
+            bransjetekst,
+            f"Størrelse: {lead_ansatte} ansatte",
+            "Egen nettside gjør aktivering enklere" if nettside else "Manglende nettside trekker litt ned",
+        ],
+        "intent_grunner": [
+            "Vekstindikator: over 50 ansatte" if lead_ansatte >= 50 else "Modent nok selskap for strukturert læring",
+            geotekst,
+            "Har digital tilstedeværelse" if nettside else "Begrenset digital tilstedeværelse",
+        ],
+        "hvorfor_na": hvorfor_na,
+    }
+
 def scroll_til_toppen():
     components.html(
         """
