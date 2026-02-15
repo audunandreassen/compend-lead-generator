@@ -967,8 +967,11 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje, bht_plikt):
     6. Følg ALLTID denne malen:
     
     Salgsorientert analyse for HAMAR BYGG AS
+    
     Bransje: Oppføring av bygninger
+    
     BHT-plikt: Ja
+
     
     Prioritering og posisjonering
     HAMAR BYGG AS opererer i en bransje med strenge krav til helse, miljø og sikkerhet (HMS) utviklet for å ivareta arbeidstakernes sikkerhet og trivsel. Som et selskap med BHT-plikt, har de et særskilt ansvar for å implementere systematisk opplæring og dokumentasjon av HMS-arbeidet. Dette øker behovet for en strukturert opplæringsplan, som kan hjelpe dem med både å oppfylle lovpålagte krav og forbedre arbeidsmiljøet.
