@@ -482,6 +482,71 @@ def bygg_leadscore(lead, hoved_firma):
         "hvorfor_na": hvorfor_na,
     }
 
+def bygg_hovedscore(hoved_firma, leads):
+    ansatte = hoved_firma.get("antallAnsatte") or 0
+    nettside = bool(hoved_firma.get("hjemmeside"))
+    epostdekning = len(st.session_state.get("eposter", []))
+    adresse = hoved_firma.get("forretningsadresse", {})
+    har_full_adresse = bool(adresse.get("adresse") and adresse.get("postnummer") and adresse.get("poststed"))
+    bransjekode = hoved_firma.get("naeringskode1", {}).get("kode")
+
+    sammenlignbare = 0
+    storre_enn_hoved = 0
+    lokal_klynge = 0
+    kommune = hoved_firma.get("forretningsadresse", {}).get("kommunenummer")
+    for lead in leads:
+        if lead.get("naeringskode1", {}).get("kode") == bransjekode:
+            sammenlignbare += 1
+        if (lead.get("antallAnsatte") or 0) >= ansatte:
+            storre_enn_hoved += 1
+        if kommune and lead.get("forretningsadresse", {}).get("kommunenummer") == kommune:
+            lokal_klynge += 1
+
+    passformscore = 50
+    if ansatte >= 20:
+        passformscore += 15
+    if ansatte >= 50:
+        passformscore += 10
+    if nettside:
+        passformscore += 10
+    if har_full_adresse:
+        passformscore += 5
+    if epostdekning >= 2:
+        passformscore += 10
+    passformscore = max(0, min(100, passformscore))
+
+    intentscore = 45
+    if storre_enn_hoved >= 5:
+        intentscore += 15
+    elif storre_enn_hoved >= 2:
+        intentscore += 8
+    if lokal_klynge >= 5:
+        intentscore += 10
+    if sammenlignbare >= 10:
+        intentscore += 10
+    if nettside and epostdekning > 0:
+        intentscore += 10
+    intentscore = max(0, min(100, intentscore))
+
+    return {
+        "passformscore": passformscore,
+        "intentscore": intentscore,
+        "passform_grunner": [
+            f"Størrelse i kjernesegment: {ansatte} ansatte.",
+            "Digitalt fundament på plass med egen nettside." if nettside else "Manglende nettside reduserer skalerbar aktivering.",
+            f"Kontaktbarhet: {epostdekning} identifiserte e-postadresser.",
+            "Tydelig registrert forretningsadresse gir høy datakvalitet." if har_full_adresse else "Ufullstendig adresseinformasjon svekker datakvalitet.",
+            f"{sammenlignbare} sammenlignbare selskaper i samme bransjekode gir god benchmark.",
+        ],
+        "intent_grunner": [
+            f"{storre_enn_hoved} lignende selskaper er like store eller større – indikerer moden markedsdynamikk.",
+            f"{lokal_klynge} relevante aktører i samme kommune øker sannsynlighet for lokal konkurranse om kompetanse.",
+            "Nettside + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging.",
+            "Bransjebredden i lead-settet gir signal om vedvarende opplæringsbehov i segmentet.",
+            "Samlet vurdering: timing er gunstig for proaktiv kompetansedialog med beslutningstagere.",
+        ],
+    }
+
 def scroll_til_toppen():
     components.html(
         """
@@ -606,6 +671,38 @@ if st.session_state.hoved_firma:
     {epost_html}
 </div>""", unsafe_allow_html=True)
 
+        hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
+        st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
+        col_h_pf, col_h_int = st.columns(2)
+        with col_h_pf:
+            st.markdown(f"""
+            <div class="score-kort">
+                <div class="score-title">Passformscore (hovedselskap)</div>
+                <div class="score-value">{hovedscore['passformscore']}/100</div>
+                <ul>
+                    <li>{hovedscore['passform_grunner'][0]}</li>
+                    <li>{hovedscore['passform_grunner'][1]}</li>
+                    <li>{hovedscore['passform_grunner'][2]}</li>
+                    <li>{hovedscore['passform_grunner'][3]}</li>
+                    <li>{hovedscore['passform_grunner'][4]}</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+        with col_h_int:
+            st.markdown(f"""
+            <div class="score-kort">
+                <div class="score-title">Intentscore (hovedselskap)</div>
+                <div class="score-value">{hovedscore['intentscore']}/100</div>
+                <ul>
+                    <li>{hovedscore['intent_grunner'][0]}</li>
+                    <li>{hovedscore['intent_grunner'][1]}</li>
+                    <li>{hovedscore['intent_grunner'][2]}</li>
+                    <li>{hovedscore['intent_grunner'][3]}</li>
+                    <li>{hovedscore['intent_grunner'][4]}</li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_hub, col_space = st.columns([1, 2])
         with col_hub:
@@ -677,6 +774,7 @@ if st.session_state.hoved_firma:
                     </div>
                     """, unsafe_allow_html=True)
 
+                st.markdown('<div style="margin-top: 0.9rem;"></div>', unsafe_allow_html=True)
                 col_a, col_b = st.columns([3, 1])
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
