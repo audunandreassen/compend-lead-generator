@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 import requests
 import pandas as pd
@@ -282,6 +283,10 @@ if "soke_felt" not in st.session_state:
     st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
+if "auto_analyse_orgnr" not in st.session_state:
+    st.session_state.auto_analyse_orgnr = None
+if "scroll_topp" not in st.session_state:
+    st.session_state.scroll_topp = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -370,6 +375,16 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def scroll_til_toppen():
+    components.html(
+        """
+        <script>
+            window.parent.scrollTo({ top: 0, behavior: "smooth" });
+        </script>
+        """,
+        height=0,
+    )
+
 def utfor_analyse(orgnr):
     hoved = hent_firma_data(orgnr)
     if hoved:
@@ -443,14 +458,28 @@ with col_m:
     valgt = st_searchbox(
         sok_brreg,
         placeholder="Selskapsnavn eller organisasjonsnummer",
+        default_searchterm=st.session_state.soke_felt,
         clear_on_submit=True,
         key="brreg_sok",
     )
 
+if st.session_state.auto_analyse_orgnr:
+    orgnr = st.session_state.auto_analyse_orgnr
+    st.session_state.auto_analyse_orgnr = None
+    with st.spinner("Analyserer selskap..."):
+        utfor_analyse(orgnr)
+    st.session_state.scroll_topp = True
+    st.rerun()
+
 if valgt and valgt != st.session_state.forrige_sok:
     with st.spinner("Analyserer selskap..."):
         utfor_analyse(valgt)
+    st.session_state.scroll_topp = True
     st.rerun()
+
+if st.session_state.scroll_topp:
+    scroll_til_toppen()
+    st.session_state.scroll_topp = False
 
 # --- VISNING ---
 if st.session_state.hoved_firma:
@@ -514,6 +543,7 @@ if st.session_state.hoved_firma:
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
-                        with st.spinner("Analyserer..."):
-                            utfor_analyse(lead["organisasjonsnummer"])
+                        st.session_state.auto_analyse_orgnr = lead["organisasjonsnummer"]
+                        if "brreg_sok" in st.session_state:
+                            del st.session_state["brreg_sok"]
                         st.rerun()
