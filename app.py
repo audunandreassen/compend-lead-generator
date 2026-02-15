@@ -51,6 +51,38 @@ def bht_svar_for_firma(firma):
     return "Ja" if er_underlagt_bht(kode) else "Nei"
 
 
+def begrens_score(verdi, minimum=0, maksimum=100):
+    return max(minimum, min(maksimum, int(round(verdi))))
+
+
+def beregn_alder_aar(stiftelsesdato):
+    if not stiftelsesdato:
+        return None
+
+    dato_tekst = str(stiftelsesdato).replace("Z", "+00:00")
+    try:
+        stiftet = datetime.fromisoformat(dato_tekst)
+    except ValueError:
+        return None
+
+    if stiftet.tzinfo is None:
+        stiftet = stiftet.replace(tzinfo=timezone.utc)
+
+    alder = (datetime.now(timezone.utc) - stiftet).days / 365.25
+    return max(0.0, alder)
+
+
+def tell_kontaktpunkter(kontaktinfo, eposter=None):
+    eposter = eposter or []
+    return min(
+        5,
+        len([ep for ep in eposter if ep])
+        + (1 if kontaktinfo.get("epost") else 0)
+        + (1 if kontaktinfo.get("telefon") else 0)
+        + (1 if kontaktinfo.get("mobil") else 0),
+    )
+
+
 def hent_datakvalitet_label(score):
     if score >= 75:
         return {
@@ -919,8 +951,8 @@ def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
     eposter = eposter or []
     kontaktinfo = hent_kontaktinfo_fra_firma(firma)
     har_daglig_leder = bool((firma or {}).get("daglig_leder") and (firma or {}).get("daglig_leder") != "Ikke oppgitt")
-    adresse = firma.get("forretningsadresse", {})
-    nettside = firma.get("hjemmeside") or ""
+    adresse = (firma or {}).get("forretningsadresse", {})
+    nettside = (firma or {}).get("hjemmeside") or ""
     nettside_status = bool(verifiser_nettside(nettside) or normaliser_nettside_url(nettside))
 
     adresse_felt = {
@@ -931,59 +963,47 @@ def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
     }
     adresse_dekning = sum(adresse_felt.values())
 
-    kontaktpunkter = 0
-    kontaktpunkter += min(2, len([e for e in eposter if e]))
-    kontaktpunkter += 1 if kontaktinfo.get("epost") else 0
-    kontaktpunkter += 1 if kontaktinfo.get("telefon") else 0
-    kontaktpunkter += 1 if kontaktinfo.get("mobil") else 0
-    kontaktpunkter = min(5, kontaktpunkter)
+    kontaktpunkter = tell_kontaktpunkter(kontaktinfo, eposter)
+
+    alder_aar = beregn_alder_aar((firma or {}).get("stiftelsesdato"))
 
     score = 0
-    score += 25 if nettside_status else 0
+    score += 20 if nettside_status else 6
+    score += (adresse_dekning / 4) * 25
+    score += (kontaktpunkter / 5) * 25
+    score += 10 if har_daglig_leder else 2
 
-    if adresse_dekning == 4:
-        score += 25
-    elif adresse_dekning == 3:
-        score += 19
-    elif adresse_dekning == 2:
-        score += 12
-    elif adresse_dekning == 1:
-        score += 6
-
-    if kontaktpunkter >= 5:
-        score += 30
-    elif kontaktpunkter >= 3:
-        score += 22
-    elif kontaktpunkter >= 2:
-        score += 15
-    elif kontaktpunkter >= 1:
-        score += 8
-
-    if enrichment_age_timer is None:
-        score += 6
-    elif enrichment_age_timer <= 24:
-        score += 15
-    elif enrichment_age_timer <= 72:
-        score += 12
-    elif enrichment_age_timer <= 168:
-        score += 8
-    else:
-        score += 4
-
-    if har_daglig_leder:
+    if alder_aar is None:
         score += 5
-
-    score = max(0, min(100, score))
-    er_lav = score < 50
+        alder_tekst = "Selskapsalder ikke bekreftet i datagrunnlaget."
+    elif alder_aar >= 10:
+        score += 10
+        alder_tekst = f"Selskapet har historikk på omtrent {alder_aar:.1f} år."
+    elif alder_aar >= 3:
+        score += 8
+        alder_tekst = f"Selskapet har etablert historikk ({alder_aar:.1f} år)."
+    else:
+        score += 5
+        alder_tekst = f"Relativt nytt selskap ({alder_aar:.1f} år) gir noe større usikkerhet."
 
     if enrichment_age_timer is None:
+        score += 4
         ferskhet_tekst = "Ferskhet ikke målt – estimat basert på nåværende datagrunnlag."
     elif enrichment_age_timer <= 24:
+        score += 10
         ferskhet_tekst = "Enrichment-data er oppdatert siste 24 timer."
+    elif enrichment_age_timer <= 72:
+        score += 8
+        ferskhet_tekst = "Enrichment-data er oppdatert siste 72 timer."
     elif enrichment_age_timer <= 168:
+        score += 6
         ferskhet_tekst = "Enrichment-data er oppdatert siste uke."
     else:
+        score += 3
         ferskhet_tekst = "Enrichment-data er eldre enn én uke."
+
+    score = begrens_score(score)
+    er_lav = score < 50
 
     return {
         "datakvalitet": score,
@@ -992,7 +1012,7 @@ def bygg_datakvalitet(firma, eposter=None, enrichment_age_timer=None):
             f"Adressefelt med verdi: {adresse_dekning}/4.",
             f"Kontaktdekning: {kontaktpunkter}/5 kontaktpunkter (e-post/telefon/mobil).",
             "Daglig leder identifisert i Brreg-data." if har_daglig_leder else "Daglig leder er ikke identifisert i tilgjengelig data.",
-            ferskhet_tekst,
+            f"{alder_tekst} {ferskhet_tekst}",
         ],
         "hoy_usikkerhet": er_lav,
     }
@@ -1010,39 +1030,44 @@ def bygg_leadscore(lead, hoved_firma):
     samme_kommune = bool(lead_kommune and lead_kommune == hoved_kommune)
 
     nettside = lead.get("hjemmeside") or ""
-    nettside_validering = hent_validering_fra_cache(nettside)
+    nettside_validering = lead.get("_nettside_validering") or hent_validering_fra_cache(nettside)
     nettside_status = nettside_validering.get("status")
     nettside_ok = nettside_status in ("active", "redirected")
 
-    # Passformscore: hvor godt leadet matcher hovedselskapet i størrelse og segment
-    passformscore = 35
-    if samme_bransje:
-        passformscore += 35
-    if lead_ansatte >= 20:
-        passformscore += 15
-    if abs(lead_ansatte - hoved_ansatte) <= 50:
-        passformscore += 10
-    if nettside_ok:
-        passformscore += 5
-    elif nettside_status in ("inactive", "error"):
-        passformscore -= 3
-    passformscore = max(0, min(100, passformscore))
+    lead_eposter = lead.get("_eposter", [])
+    lead_kontakt = hent_kontaktinfo_fra_firma(lead)
+    kontaktpunkter = tell_kontaktpunkter(lead_kontakt, lead_eposter)
+    lead_alder = beregn_alder_aar(lead.get("stiftelsesdato"))
 
-    # Intentscore: sannsynlighet for at timing er riktig
-    intentscore = 30
-    if lead_ansatte >= 50:
-        intentscore += 20
-    elif lead_ansatte >= 20:
+    ansatt_ratio = 1.0
+    if hoved_ansatte > 0:
+        ansatt_ratio = min(1.0, (min(lead_ansatte, hoved_ansatte) / max(lead_ansatte, hoved_ansatte)) if lead_ansatte > 0 else 0)
+
+    passformscore = 20
+    passformscore += 35 if samme_bransje else 10
+    passformscore += 20 * ansatt_ratio
+    passformscore += 10 if nettside_ok else 3
+    passformscore += (kontaktpunkter / 5) * 10
+    passformscore += 5 if samme_kommune else 0
+    passformscore = begrens_score(passformscore)
+
+    intentscore = 25
+    if lead_ansatte >= 100:
+        intentscore += 25
+    elif lead_ansatte >= 30:
+        intentscore += 18
+    elif lead_ansatte >= 10:
         intentscore += 10
-    if samme_kommune:
-        intentscore += 15
-    if nettside_ok:
-        intentscore += 10
-    elif nettside_status in ("inactive", "error"):
-        intentscore -= 5
-    if lead_ansatte > hoved_ansatte:
-        intentscore += 10
-    intentscore = max(0, min(100, intentscore))
+    else:
+        intentscore += 5
+
+    intentscore += 15 if lead_ansatte > hoved_ansatte else 8
+    intentscore += 10 if samme_kommune else 5
+    intentscore += 10 if nettside_ok else 0
+    intentscore += (kontaktpunkter / 5) * 10
+    if lead_alder is not None:
+        intentscore += 8 if lead_alder >= 5 else 3
+    intentscore = begrens_score(intentscore)
 
     bransjetekst = "Samme bransjekode som valgt selskap" if samme_bransje else "Nærliggende bransje med lignende opplæringsbehov"
     geotekst = "Lokalt selskap i samme kommune" if samme_kommune else "Kan prioriteres nasjonalt ved kapasitetsbehov"
@@ -1061,10 +1086,8 @@ def bygg_leadscore(lead, hoved_firma):
             (datetime.now(timezone.utc) - enrichment_tidspunkt).total_seconds() / 3600,
         )
 
-    lead_eposter = []
-    lead_kontakt = hent_kontaktinfo_fra_firma(lead)
     if lead_kontakt.get("epost"):
-        lead_eposter.append(lead_kontakt.get("epost"))
+        lead_eposter = list(dict.fromkeys(lead_eposter + [lead_kontakt.get("epost")]))
 
     datakvalitet = bygg_datakvalitet(lead, eposter=lead_eposter, enrichment_age_timer=enrichment_age_timer)
 
@@ -1074,11 +1097,11 @@ def bygg_leadscore(lead, hoved_firma):
         "datakvalitet": datakvalitet["datakvalitet"],
         "passform_grunner": [
             bransjetekst,
-            f"Størrelse: {lead_ansatte} ansatte",
-            f"Nettsidevalidering: {valideringsstatus_tekst(nettside_status)}",
+            f"Størrelse: {lead_ansatte} ansatte (relativ match: {int(ansatt_ratio * 100)}%).",
+            f"Kontaktpunkter tilgjengelig: {kontaktpunkter}/5.",
         ],
         "intent_grunner": [
-            "Vekstindikator: over 50 ansatte" if lead_ansatte >= 50 else "Modent nok selskap for strukturert læring",
+            "Vekstindikator: over 100 ansatte" if lead_ansatte >= 100 else "Selskapets størrelse indikerer løpende kompetansebehov",
             geotekst,
             "Digital tilstedeværelse er verifisert" if nettside_ok else "Digital tilstedeværelse er usikker",
         ],
@@ -1090,17 +1113,30 @@ def bygg_leadscore(lead, hoved_firma):
 
 def bygg_hovedscore(hoved_firma, leads):
     ansatte = hoved_firma.get("antallAnsatte") or 0
-    epostdekning = len(st.session_state.get("eposter", []))
+    eposter = st.session_state.get("eposter", [])
+    epostdekning = len(eposter)
+    kontaktinfo = hent_kontaktinfo_fra_firma(hoved_firma)
+    kontaktpunkter = tell_kontaktpunkter(kontaktinfo, eposter)
     adresse = hoved_firma.get("forretningsadresse", {})
-    har_full_adresse = bool(adresse.get("adresse") and adresse.get("postnummer") and adresse.get("poststed"))
+    adresse_dekning = sum(
+        [
+            bool(adresse.get("adresse")),
+            bool(adresse.get("postnummer")),
+            bool(adresse.get("poststed")),
+            bool(adresse.get("kommunenummer")),
+        ]
+    )
     bransjekode = hoved_firma.get("naeringskode1", {}).get("kode")
     nettside_validering = st.session_state.get("hoved_nettside_validering") or hent_validering_fra_cache(hoved_firma.get("hjemmeside", ""))
     nettside_status = nettside_validering.get("status")
     nettside_ok = nettside_status in ("active", "redirected")
+    hoved_alder = beregn_alder_aar(hoved_firma.get("stiftelsesdato"))
 
     sammenlignbare = 0
     storre_enn_hoved = 0
     lokal_klynge = 0
+    lead_med_kontakt = 0
+    lead_med_nettside = 0
     kommune = hoved_firma.get("forretningsadresse", {}).get("kommunenummer")
     for lead in leads:
         if lead.get("naeringskode1", {}).get("kode") == bransjekode:
@@ -1109,36 +1145,32 @@ def bygg_hovedscore(hoved_firma, leads):
             storre_enn_hoved += 1
         if kommune and lead.get("forretningsadresse", {}).get("kommunenummer") == kommune:
             lokal_klynge += 1
+        if tell_kontaktpunkter(hent_kontaktinfo_fra_firma(lead), lead.get("_eposter", [])) >= 2:
+            lead_med_kontakt += 1
+        status = (lead.get("_nettside_validering") or {}).get("status")
+        if status in ("active", "redirected"):
+            lead_med_nettside += 1
 
-    passformscore = 50
-    if ansatte >= 20:
-        passformscore += 15
-    if ansatte >= 50:
-        passformscore += 10
-    if nettside_ok:
-        passformscore += 10
-    elif nettside_status in ("inactive", "error"):
-        passformscore -= 5
-    if har_full_adresse:
-        passformscore += 5
-    if epostdekning >= 2:
-        passformscore += 10
-    passformscore = max(0, min(100, passformscore))
+    total_leads = max(1, len(leads))
+    sammenlignbare_andel = sammenlignbare / total_leads
 
-    intentscore = 45
-    if storre_enn_hoved >= 5:
-        intentscore += 15
-    elif storre_enn_hoved >= 2:
-        intentscore += 8
-    if lokal_klynge >= 5:
-        intentscore += 10
-    if sammenlignbare >= 10:
-        intentscore += 10
-    if nettside_ok and epostdekning > 0:
-        intentscore += 10
-    elif nettside_status in ("inactive", "error"):
-        intentscore -= 5
-    intentscore = max(0, min(100, intentscore))
+    passformscore = 20
+    passformscore += 20 if nettside_ok else 5
+    passformscore += (adresse_dekning / 4) * 15
+    passformscore += (kontaktpunkter / 5) * 15
+    passformscore += min(20, ansatte * 0.4)
+    passformscore += sammenlignbare_andel * 20
+    passformscore += 10 if (hoved_alder or 0) >= 5 else 5
+    passformscore = begrens_score(passformscore)
+
+    intentscore = 25
+    intentscore += min(20, storre_enn_hoved * 3)
+    intentscore += min(15, lokal_klynge * 2)
+    intentscore += min(15, sammenlignbare * 2)
+    intentscore += (lead_med_kontakt / total_leads) * 15
+    intentscore += (lead_med_nettside / total_leads) * 10
+    intentscore += 10 if nettside_ok and epostdekning > 0 else 4
+    intentscore = begrens_score(intentscore)
 
     enrichment_tidspunkt = st.session_state.get("enrichment_tidspunkt")
     enrichment_age_timer = None
@@ -1148,7 +1180,7 @@ def bygg_hovedscore(hoved_firma, leads):
             (datetime.now(timezone.utc) - enrichment_tidspunkt).total_seconds() / 3600,
         )
 
-    datakvalitet = bygg_datakvalitet(hoved_firma, eposter=st.session_state.get("eposter", []), enrichment_age_timer=enrichment_age_timer)
+    datakvalitet = bygg_datakvalitet(hoved_firma, eposter=eposter, enrichment_age_timer=enrichment_age_timer)
 
     return {
         "passformscore": passformscore,
@@ -1157,15 +1189,15 @@ def bygg_hovedscore(hoved_firma, leads):
         "passform_grunner": [
             f"Størrelse i kjernesegment: {ansatte} ansatte.",
             f"Nettsidevalidering: {valideringsstatus_tekst(nettside_status)}.",
-            f"Kontaktbarhet: {epostdekning} identifiserte e-postadresser.",
-            "Tydelig registrert forretningsadresse gir høy datakvalitet." if har_full_adresse else "Ufullstendig adresseinformasjon svekker datakvalitet.",
-            f"{sammenlignbare} sammenlignbare selskaper i samme bransjekode gir god benchmark.",
+            f"Kontaktbarhet: {kontaktpunkter}/5 kontaktpunkter ({epostdekning} identifiserte e-postadresser).",
+            f"Adressekvalitet: {adresse_dekning}/4 felter utfylt.",
+            f"{sammenlignbare} sammenlignbare selskaper i samme bransjekode gir bedre benchmark.",
         ],
         "intent_grunner": [
             f"{storre_enn_hoved} lignende selskaper er like store eller større – indikerer moden markedsdynamikk.",
             f"{lokal_klynge} relevante aktører i samme kommune øker sannsynlighet for lokal konkurranse om kompetanse.",
-            "Nettside med god validering + e-postfunn tyder på at selskapet er mottakelig for digital dialog og oppfølging." if nettside_ok else "Nettsidestatus svekker sannsynlighet for rask digital dialog.",
-            "Bransjebredden i lead-settet gir signal om vedvarende opplæringsbehov i segmentet.",
+            f"{lead_med_kontakt}/{len(leads)} leads har minst to kontaktpunkter.",
+            f"{lead_med_nettside}/{len(leads)} leads har verifisert digital tilstedeværelse.",
             "Samlet vurdering: timing er gunstig for proaktiv kompetansedialog med beslutningstagere.",
         ],
         "datakvalitet_grunner": datakvalitet["datakvalitet_grunner"],
@@ -1184,7 +1216,10 @@ def oppdater_scorecards_med_ny_data():
 
     oppdaterte_leads = []
     for lead in st.session_state.get("mine_leads", []):
-        oppdaterte_leads.append(berik_firma_med_kontaktinfo(lead))
+        oppdatert_lead = berik_firma_med_kontaktinfo(lead)
+        oppdatert_lead["_nettside_validering"] = hent_validering_fra_cache(oppdatert_lead.get("hjemmeside", ""))
+        oppdatert_lead["_eposter"] = finn_eposter(oppdatert_lead.get("hjemmeside"), oppdatert_lead.get("nettside_kilde", st.session_state.get("nettside_kilde", "")))
+        oppdaterte_leads.append(oppdatert_lead)
     st.session_state.mine_leads = oppdaterte_leads
 
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
@@ -1282,6 +1317,8 @@ def utfor_analyse(orgnr):
                     lead["nettside_status"] = "inferred"
                 else:
                     lead["nettside_status"] = "invalid"
+
+            oppdater_scorecards_med_ny_data()
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
@@ -1384,11 +1421,7 @@ if st.session_state.hoved_firma:
                 </div>
             """, unsafe_allow_html=True)
 
-        if st.button("Vurder scorecards pa nytt med ny data", use_container_width=True):
-            with st.spinner("Henter ny data og oppdaterer scorecards..."):
-                oppdater_scorecards_med_ny_data()
-            st.success("Scorecards er oppdatert med ny informasjon.")
-            st.rerun()
+        st.info("Scorecards vurderes automatisk på nytt med oppdatert datagrunnlag.")
 
         hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
