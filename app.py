@@ -963,13 +963,13 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje, bht_plikt):
     2. Alltid inkluder et klart hvorfor nå, en tydelig HMS og etterlevelsesvinkel, og en konkret kobling til Compends kursbibliotek og Compends LMS.
     3. Hvis {bht_plikt}=Ja, skal du tydelig forklare hvorfor dette øker behovet for systematisk og dokumenterbar opplæring og hvordan det henger sammen med BHT rollen og arbeidsmiljøarbeidet.
     4. Hvis {bht_plikt}=Nei eller Ukjent, skal du likevel formulere en sterk HMS eller compliance begrunnelse med målbar forretningsverdi.
-    5. Svar på norsk. Ingen hilsener, ingen emojier. Skriv konkret og uten floskler.
-    6. Følg ALLTID denne malen:
+    5. Svar på norsk. Ingen hilsener, ingen emojier. Skriv konkret og uten floskler. Skriv gjerne lett motiverende.
+    6. Følg alltid denne malen, men velg selv hvor mye du vil skrive for hvert selskap, og hvor mye du vil variere:
     
     Salgsorientert analyse for HAMAR BYGG AS
+
     
     Bransje: Oppføring av bygninger
-    
     BHT-plikt: Ja
 
     
