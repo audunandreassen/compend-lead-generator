@@ -1229,50 +1229,83 @@ def oppdater_scorecards_med_ny_data():
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
-    # Aggressiv scroll: gjentatte forsøk over 3 sekunder for å overvinne
-    # Streamlit sin egen rendering som kan overskrive scroll-posisjonen.
+    # Bruker MutationObserver for å vente til Streamlit er ferdig med å rendre,
+    # og deretter scroller. Gjentatte forsøk etter at DOM stabiliserer seg.
     components.html(
         """
-        <div id="scroll-debug" style="font-family:monospace;font-size:11px;color:#888;padding:2px;"></div>
         <script>
         (function() {
-            var out = document.getElementById('scroll-debug');
-            var log = function(msg) { out.innerText += msg + '\\n'; };
             var doc;
             try { doc = window.parent.document; } catch(e) { return; }
 
             function doScroll() {
-                // Scroll stMain-containeren til toppen
-                var main = doc.querySelector('section.stMain');
-                if (main) main.scrollTop = 0;
-                // Scroll alle elementer med scrollTop > 0
+                // Metode 1: Finn alle scrollbare containere og sett dem til 0
+                var selectors = [
+                    'section.stMain',
+                    '[data-testid="stAppViewContainer"]',
+                    '[data-testid="stVerticalBlock"]',
+                    '.main',
+                    '.block-container'
+                ];
+                for (var s = 0; s < selectors.length; s++) {
+                    var el = doc.querySelector(selectors[s]);
+                    if (el && el.scrollTop > 0) el.scrollTop = 0;
+                }
+                // Metode 2: Brute force - alle elementer med scrollTop
                 var all = doc.querySelectorAll('*');
                 for (var i = 0; i < all.length; i++) {
-                    try { if (all[i].scrollTop > 100) all[i].scrollTop = 0; } catch(e) {}
+                    try { if (all[i].scrollTop > 50) all[i].scrollTop = 0; } catch(e) {}
                 }
-                // scrollIntoView på ankeret
+                // Metode 3: scrollIntoView på ankeret
                 var anchor = doc.getElementById('compend-top');
                 if (anchor) anchor.scrollIntoView({behavior:'instant',block:'start'});
+                // Metode 4: window.parent.scrollTo
                 try { window.parent.scrollTo(0, 0); } catch(e) {}
             }
 
-            // Kjør scroll umiddelbart + gjentatte ganger over 3 sekunder
-            var attempts = 0;
-            var maxAttempts = 30;
-            doScroll();
-            var interval = setInterval(function() {
-                doScroll();
-                attempts++;
-                log('Scroll attempt ' + attempts);
-                if (attempts >= maxAttempts) {
-                    clearInterval(interval);
-                    log('Done - ' + maxAttempts + ' attempts over 3s');
+            // Vent 500ms for at Streamlit skal begynne rendre, så bruk
+            // MutationObserver for å detektere når DOM stabiliserer seg
+            setTimeout(function() {
+                var timer = null;
+                var scrollCount = 0;
+
+                function onStable() {
+                    doScroll();
+                    scrollCount++;
+                    // Fortsett å scrolle noen ganger etter stabilisering
+                    if (scrollCount < 5) {
+                        setTimeout(onStable, 200);
+                    }
                 }
-            }, 100);
+
+                var observer = new MutationObserver(function() {
+                    // Reset timeren hver gang DOM endres
+                    clearTimeout(timer);
+                    timer = setTimeout(function() {
+                        observer.disconnect();
+                        onStable();
+                    }, 300);
+                });
+
+                observer.observe(doc.body, {childList: true, subtree: true});
+
+                // Fallback: scroll uansett etter 2 sekunder
+                setTimeout(function() {
+                    observer.disconnect();
+                    doScroll();
+                    // Gjenta noen ganger
+                    setTimeout(doScroll, 200);
+                    setTimeout(doScroll, 500);
+                    setTimeout(doScroll, 1000);
+                }, 2000);
+
+                // Også scroll umiddelbart, i tilfelle rendering allerede er ferdig
+                doScroll();
+            }, 500);
         })();
         </script>
         """,
-        height=50,
+        height=0,
     )
 
 def utfor_analyse(orgnr):
@@ -1600,8 +1633,6 @@ if st.session_state.hoved_firma:
                         st.rerun()
 
 # --- SCROLL TIL TOPPEN (plassert etter alt innhold er rendret) ---
-st.write(f"DEBUG scroll_topp = {st.session_state.scroll_topp}, auto_analyse = {st.session_state.auto_analyse_orgnr}")
 if st.session_state.scroll_topp:
-    st.write("DEBUG: scroll_til_toppen() KALLES NÅ")
     st.session_state.scroll_topp = False
     scroll_til_toppen()
