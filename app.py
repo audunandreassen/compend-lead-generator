@@ -1231,7 +1231,55 @@ def scroll_til_toppen():
     components.html(
         """
         <script>
-            window.parent.scrollTo({ top: 0, behavior: "smooth" });
+            const scrollContainersToTop = (ctx) => {
+                if (!ctx) return;
+
+                try {
+                    ctx.scrollTo(0, 0);
+                } catch (_) {}
+
+                const d = ctx.document;
+                if (!d) return;
+
+                const targets = [
+                    d.documentElement,
+                    d.body,
+                    d.querySelector('section.main'),
+                    d.querySelector('[data-testid="stAppViewContainer"]'),
+                    d.querySelector('.stAppViewContainer'),
+                    d.querySelector('main'),
+                ].filter(Boolean);
+
+                targets.forEach((el) => {
+                    try {
+                        el.scrollTop = 0;
+                    } catch (_) {}
+                    try {
+                        el.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                    } catch (_) {}
+                });
+            };
+
+            const run = () => {
+                scrollContainersToTop(window);
+                scrollContainersToTop(window.parent);
+                if (window.parent && window.parent.parent && window.parent.parent !== window.parent) {
+                    scrollContainersToTop(window.parent.parent);
+                }
+            };
+
+            run();
+            requestAnimationFrame(run);
+            setTimeout(run, 60);
+
+            let attempts = 0;
+            const intervalId = setInterval(() => {
+                run();
+                attempts += 1;
+                if (attempts >= 20) {
+                    clearInterval(intervalId);
+                }
+            }, 60);
         </script>
         """,
         height=0,
@@ -1359,6 +1407,7 @@ with col_m:
     )
 
 if st.session_state.auto_analyse_orgnr:
+    scroll_til_toppen()
     orgnr = st.session_state.auto_analyse_orgnr
     st.session_state.auto_analyse_orgnr = None
     with st.spinner("Analyserer selskap..."):
@@ -1559,6 +1608,7 @@ if st.session_state.hoved_firma:
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
                         st.session_state.soke_felt = lead["organisasjonsnummer"]
+                        st.session_state.scroll_topp = True
                         st.session_state.auto_analyse_orgnr = lead["organisasjonsnummer"]
                         if "brreg_sok" in st.session_state:
                             del st.session_state["brreg_sok"]
