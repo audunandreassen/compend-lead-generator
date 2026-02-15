@@ -392,18 +392,67 @@ def hent_brreg_roller(orgnr):
 
 def finn_daglig_leder(orgnr):
     roller_data = hent_brreg_roller(orgnr)
-    rollegrupper = roller_data.get("rollegrupper") or []
+    rollegrupper = (
+        roller_data.get("rollegrupper")
+        or roller_data.get("organisasjonsroller")
+        or roller_data.get("roller")
+        or roller_data.get("_embedded", {}).get("rollegrupper")
+        or []
+    )
+
+    def hent_personnavn(rolle):
+        if not isinstance(rolle, dict):
+            return ""
+
+        person = rolle.get("person") or rolle.get("rolleinnehaver") or {}
+        if isinstance(person, dict):
+            return (
+                person.get("navn")
+                or person.get("fulltNavn")
+                or person.get("fulltnavn")
+                or ""
+            )
+
+        if isinstance(person, str):
+            return person
+        return ""
+
+    def rolle_er_daglig_leder(element):
+        if not isinstance(element, dict):
+            return False
+
+        tekstfelter = [
+            element.get("type"),
+            element.get("beskrivelse"),
+            element.get("rolle"),
+            element.get("rollekode"),
+            element.get("rolletype"),
+            element.get("kode"),
+            (element.get("rolle") or {}).get("beskrivelse") if isinstance(element.get("rolle"), dict) else None,
+            (element.get("rolle") or {}).get("kode") if isinstance(element.get("rolle"), dict) else None,
+        ]
+        samlet = " ".join(str(t) for t in tekstfelter if t).lower()
+        return "daglig" in samlet or "dl" == samlet.strip()
 
     for gruppe in rollegrupper:
-        beskrivelse = (gruppe.get("type") or "") + " " + (gruppe.get("beskrivelse") or "")
-        if "daglig" not in beskrivelse.lower():
-            continue
-
-        for rolle in gruppe.get("roller", []):
-            person = rolle.get("person", {})
-            navn = person.get("navn")
+        if isinstance(gruppe, dict) and rolle_er_daglig_leder(gruppe):
+            navn = hent_personnavn(gruppe)
             if navn:
                 return navn
+
+        roller = gruppe.get("roller", []) if isinstance(gruppe, dict) else []
+        for rolle in roller:
+            if rolle_er_daglig_leder(rolle) or (isinstance(gruppe, dict) and rolle_er_daglig_leder(gruppe)):
+                navn = hent_personnavn(rolle)
+                if navn:
+                    return navn
+
+    for rolle in roller_data.get("_embedded", {}).get("roller", []):
+        if rolle_er_daglig_leder(rolle):
+            navn = hent_personnavn(rolle)
+            if navn:
+                return navn
+
     return "Ikke oppgitt"
 
 def hent_kontaktinfo_fra_firma(firma):
@@ -413,21 +462,29 @@ def hent_kontaktinfo_fra_firma(firma):
     kontakt = firma.get("kontaktinformasjon", {})
     epost = (
         kontakt.get("epostadresse")
+        or kontakt.get("epost")
+        or kontakt.get("email")
         or firma.get("epostadresse")
+        or firma.get("epost")
+        or firma.get("email")
         or ""
     )
     telefon = (
         kontakt.get("telefon")
         or kontakt.get("telefonnummer")
+        or kontakt.get("mobiltelefonnummer")
         or firma.get("telefon")
         or firma.get("telefonnummer")
+        or firma.get("mobiltelefonnummer")
         or ""
     )
     mobil = (
         kontakt.get("mobil")
         or kontakt.get("mobilnummer")
+        or kontakt.get("mobiltelefonnummer")
         or firma.get("mobil")
         or firma.get("mobilnummer")
+        or firma.get("mobiltelefonnummer")
         or ""
     )
     return {
@@ -442,8 +499,8 @@ def berik_firma_med_kontaktinfo(firma):
 
     orgnr = firma.get("organisasjonsnummer")
     detaljer = hent_brreg_detaljer(orgnr) or {}
-    kontakt = hent_kontaktinfo_fra_firma(detaljer)
-    for felt in ("epostadresse", "telefon", "telefonnummer", "mobil", "mobilnummer"):
+    kontakt = hent_kontaktinfo_fra_firma({**firma, **detaljer})
+    for felt in ("epostadresse", "epost", "telefon", "telefonnummer", "mobil", "mobilnummer", "mobiltelefonnummer"):
         verdi = detaljer.get(felt)
         if verdi and not firma.get(felt):
             firma[felt] = verdi
