@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 import requests
 import pandas as pd
@@ -284,6 +285,10 @@ if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
 if "siste_sok_valg" not in st.session_state:
     st.session_state.siste_sok_valg = None
+if "pending_scroll_orgnr" not in st.session_state:
+    st.session_state.pending_scroll_orgnr = None
+if "scroll_then_analyze" not in st.session_state:
+    st.session_state.scroll_then_analyze = False
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -455,6 +460,25 @@ if valgt and valgt != st.session_state.siste_sok_valg:
     st.session_state.siste_sok_valg = valgt
     st.rerun()
 
+if st.session_state.scroll_then_analyze and st.session_state.pending_scroll_orgnr:
+    components.html(
+        """
+        <script>
+            window.parent.scrollTo({ top: 0, behavior: 'smooth' });
+        </script>
+        """,
+        height=0,
+    )
+    st.session_state.scroll_then_analyze = False
+    st.rerun()
+
+if st.session_state.pending_scroll_orgnr and not st.session_state.scroll_then_analyze:
+    orgnr = st.session_state.pending_scroll_orgnr
+    st.session_state.pending_scroll_orgnr = None
+    with st.spinner("Analyserer..."):
+        utfor_analyse(orgnr)
+    st.rerun()
+
 # --- VISNING ---
 if st.session_state.hoved_firma:
     f = st.session_state.hoved_firma
@@ -516,7 +540,6 @@ if st.session_state.hoved_firma:
                 col_a, col_b = st.columns([3, 1])
                 with col_b:
                     if st.button("Analyser", key=f"an_{lead['organisasjonsnummer']}_{i}", use_container_width=True):
-                        st.session_state.soke_felt = lead["organisasjonsnummer"]
-                        with st.spinner("Analyserer..."):
-                            utfor_analyse(lead["organisasjonsnummer"])
+                        st.session_state.pending_scroll_orgnr = lead["organisasjonsnummer"]
+                        st.session_state.scroll_then_analyze = True
                         st.rerun()
