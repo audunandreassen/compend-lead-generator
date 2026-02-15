@@ -1229,38 +1229,85 @@ def oppdater_scorecards_med_ny_data():
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
 def scroll_til_toppen():
-    # Use a raw <iframe srcdoc> via st.markdown instead of components.html.
-    # components.html adds sandbox="allow-scripts" (without allow-same-origin),
-    # which blocks access to window.parent.document.
-    # A raw srcdoc iframe inherits the parent's origin without sandbox restrictions.
-    js_code = (
-        "(function(){"
-        "var doc;"
-        "try{doc=window.parent.document}catch(e){return}"
-        "function s(){"
-        "var anchor=doc.getElementById('compend-top');"
-        "if(anchor){anchor.scrollIntoView({behavior:'instant',block:'start'})}"
-        "var a=doc.querySelectorAll('*');"
-        "for(var i=0;i<a.length;i++){try{if(a[i].scrollTop>0)a[i].scrollTop=0}catch(e){}}"
-        "try{window.parent.scrollTo(0,0)}catch(e){}"
-        "}"
-        "s();"
-        "var end=Date.now()+3000;"
-        "var obs=new MutationObserver(function(){if(Date.now()<end){s()}else{obs.disconnect()}});"
-        "obs.observe(doc.body,{childList:true,subtree:true});"
-        "var d=[50,150,300,600,1000,1500,2000,2500,3000];"
-        "for(var j=0;j<d.length;j++){setTimeout(s,d[j])}"
-        "setTimeout(function(){obs.disconnect()},3500)"
-        "})()"
-    )
-    srcdoc_content = f"<html><body><script>{js_code}</script></body></html>"
-    escaped_srcdoc = html.escape(srcdoc_content, quote=True)
-    ts = id(object())
-    st.markdown(
-        f'<iframe srcdoc="{escaped_srcdoc}" '
-        f'style="width:0;height:0;border:0;position:absolute;left:-9999px;" '
-        f'data-t="{ts}"></iframe>',
-        unsafe_allow_html=True,
+    # Diagnostic version: shows visible debug output so we can see
+    # what's happening with JS execution and parent document access.
+    components.html(
+        """
+        <div id="scroll-debug" style="font-family:monospace;font-size:12px;color:#333;padding:4px;"></div>
+        <script>
+        (function() {
+            var out = document.getElementById('scroll-debug');
+            var log = function(msg) { out.innerText += msg + '\\n'; };
+
+            log('1. Script running');
+
+            var doc;
+            try {
+                doc = window.parent.document;
+                log('2. parent.document OK - ' + doc.querySelectorAll('*').length + ' elements');
+            } catch(e) {
+                log('2. parent.document BLOCKED: ' + e.message);
+                try {
+                    doc = window.top.document;
+                    log('2b. top.document OK');
+                } catch(e2) {
+                    log('2b. top.document BLOCKED: ' + e2.message);
+                    return;
+                }
+            }
+
+            // Find scrolled elements
+            var all = doc.querySelectorAll('*');
+            var scrolled = [];
+            for (var i = 0; i < all.length; i++) {
+                try {
+                    if (all[i].scrollTop > 0) {
+                        scrolled.push(all[i].tagName + '.' + (all[i].className||'').substring(0,30) + '=' + all[i].scrollTop);
+                    }
+                } catch(e) {}
+            }
+            log('3. Scrolled elements: ' + (scrolled.length > 0 ? scrolled.join(' | ') : 'NONE FOUND'));
+
+            // Try scrollIntoView on anchor
+            var anchor = doc.getElementById('compend-top');
+            log('4. Anchor #compend-top: ' + (anchor ? 'FOUND' : 'NOT FOUND'));
+
+            // Attempt scroll
+            if (anchor) {
+                try {
+                    anchor.scrollIntoView({behavior:'instant',block:'start'});
+                    log('5. scrollIntoView called');
+                } catch(e) {
+                    log('5. scrollIntoView ERROR: ' + e.message);
+                }
+            }
+            for (var i = 0; i < scrolled.length; i++) {
+                // already logged, now reset
+            }
+            var all2 = doc.querySelectorAll('*');
+            for (var i = 0; i < all2.length; i++) {
+                try { if (all2[i].scrollTop > 0) all2[i].scrollTop = 0; } catch(e) {}
+            }
+            try { window.parent.scrollTo(0, 0); } catch(e) {}
+            log('6. Scroll reset attempted');
+
+            // Check after 500ms if scroll stuck
+            setTimeout(function() {
+                var still = [];
+                var a = doc.querySelectorAll('*');
+                for (var i = 0; i < a.length; i++) {
+                    try {
+                        if (a[i].scrollTop > 0) {
+                            still.push(a[i].tagName + '.' + (a[i].className||'').substring(0,30) + '=' + a[i].scrollTop);
+                        }
+                    } catch(e) {}
+                }
+                log('7. After 500ms, scrolled: ' + (still.length > 0 ? still.join(' | ') : 'NONE (scroll worked!)'));
+            }, 500);
+        })();
+        </script>
+        """,
+        height=150,
     )
 
 def utfor_analyse(orgnr):
