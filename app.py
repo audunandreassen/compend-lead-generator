@@ -1227,6 +1227,101 @@ def oppdater_scorecards_med_ny_data():
 
     st.session_state.enrichment_tidspunkt = datetime.now(timezone.utc)
 
+def installer_analyser_scroll_hook():
+    components.html(
+        """
+        <script>
+            const hentDokument = (ctx) => {
+                try {
+                    return ctx && ctx.document ? ctx.document : null;
+                } catch (_) {
+                    return null;
+                }
+            };
+
+            const hentKontekster = () => {
+                const contexts = [window];
+                try {
+                    if (window.parent && window.parent !== window) {
+                        contexts.push(window.parent);
+                    }
+                } catch (_) {}
+                try {
+                    if (window.top && !contexts.includes(window.top)) {
+                        contexts.push(window.top);
+                    }
+                } catch (_) {}
+                return contexts;
+            };
+
+            const scrollTopNow = () => {
+                hentKontekster().forEach((ctx) => {
+                    try {
+                        ctx.scrollTo(0, 0);
+                    } catch (_) {}
+
+                    const d = hentDokument(ctx);
+                    if (!d) return;
+
+                    [
+                        d.documentElement,
+                        d.body,
+                        d.querySelector('section.main'),
+                        d.querySelector('[data-testid="stAppViewContainer"]'),
+                        d.querySelector('.stAppViewContainer'),
+                        d.querySelector('main'),
+                    ].filter(Boolean).forEach((el) => {
+                        try {
+                            el.scrollTop = 0;
+                        } catch (_) {}
+                        try {
+                            el.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+                        } catch (_) {}
+                    });
+                });
+            };
+
+            const parentWindow = (() => {
+                try {
+                    return window.parent || window;
+                } catch (_) {
+                    return window;
+                }
+            })();
+
+            if (parentWindow.__compendAnalyserScrollHookInstalled) {
+                return;
+            }
+            parentWindow.__compendAnalyserScrollHookInstalled = true;
+
+            const bindHooks = () => {
+                const d = hentDokument(parentWindow);
+                if (!d) return;
+
+                d.querySelectorAll('button').forEach((btn) => {
+                    if (btn.dataset.compendScrollHookBound === '1') return;
+                    if (btn.innerText && btn.innerText.trim() === 'Analyser') {
+                        btn.dataset.compendScrollHookBound = '1';
+                        btn.addEventListener('click', () => {
+                            scrollTopNow();
+                            requestAnimationFrame(scrollTopNow);
+                            setTimeout(scrollTopNow, 60);
+                        });
+                    }
+                });
+            };
+
+            bindHooks();
+            const d = hentDokument(parentWindow);
+            if (d && d.body) {
+                const observer = new MutationObserver(bindHooks);
+                observer.observe(d.body, { childList: true, subtree: true });
+            }
+        </script>
+        """,
+        height=0,
+    )
+
 def scroll_til_toppen():
     components.html(
         """
@@ -1421,6 +1516,8 @@ with col_m:
         clear_on_submit=True,
         key="brreg_sok",
     )
+
+installer_analyser_scroll_hook()
 
 if st.session_state.auto_analyse_orgnr:
     scroll_til_toppen()
