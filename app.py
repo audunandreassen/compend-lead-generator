@@ -1362,10 +1362,10 @@ if st.session_state.hoved_firma:
         hovedscore = bygg_hovedscore(f, st.session_state.get("mine_leads", []))
         hoved_dk_label = hent_datakvalitet_label(hovedscore["datakvalitet"])
         st.markdown(f"""<h2 style="margin-top:0; margin-bottom:0.3rem; font-size:1.3rem;">{f.get("navn", "Ukjent")}</h2>
-<span class="firma-badge">{bransje}</span>
+<span class="firma-badge">{bransje}</span> <span class="{hoved_dk_label['css_klasse']}">{hoved_dk_label['tekst']}</span>
 <div class="firma-detaljer">
     <div class="detalj"><strong>Org.nr.</strong> {f.get('organisasjonsnummer', 'Ukjent')}</div>
-    <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')} <span class="{hoved_dk_label['css_klasse']}">{hoved_dk_label['tekst']}</span></div>
+    <div class="detalj"><strong>Ansatte</strong> {f.get('antallAnsatte', 'Ukjent')}</div>
     <div class="detalj"><strong>Nettside</strong> {nettside_visning}</div>
     <div class="detalj"><strong>Nettsidevalidering</strong> {valideringsstatus}</div>
     <div class="detalj"><strong>Adresse</strong> {formater_adresse(f)}</div>
