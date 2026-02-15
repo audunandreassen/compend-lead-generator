@@ -262,7 +262,7 @@ if st.session_state.hoved_firma:
         if st.button("Overfør til HubSpot", use_container_width=True):
             data_pakke = {
                 "firma": f.get("navn", "Ukjent"),
-                "orgnr": f["organisasjonsnummer"],
+                "organisasjonsnummer": f.get("organisasjonsnummer", ""),
                 "isbryter": st.session_state.get("isbryter"),
                 "bransje": f.get("naeringskode1", {}).get("beskrivelse"),
                 "ansatte": f.get("antallAnsatte"),
