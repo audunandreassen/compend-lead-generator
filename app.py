@@ -559,6 +559,25 @@ def formater_adresse(f):
     post = f"{adr.get('postnummer', '')} {adr.get('poststed', '')}"
     return f"{gate}, {post}".strip(", ")
 
+def finn_nettside_status(firma):
+    status = firma.get("nettside_status")
+    if status in {"confirmed", "inferred", "missing", "invalid"}:
+        return status
+
+    nettside = firma.get("hjemmeside") or ""
+    if not nettside:
+        return "missing"
+    return "inferred" if normaliser_nettside_url(nettside) else "invalid"
+
+def nettside_status_tekst(status):
+    tekster = {
+        "confirmed": "Nettsiden er verifisert og tilgjengelig.",
+        "inferred": "Nettsiden er antatt gyldig, men ikke eksplisitt verifisert.",
+        "missing": "Nettside er ukjent eller ikke oppgitt.",
+        "invalid": "Oppgitt nettside ser ugyldig ut eller svarer ikke.",
+    }
+    return tekster.get(status, tekster["missing"])
+
 def bygg_leadscore(lead, hoved_firma):
     lead_ansatte = lead.get("antallAnsatte") or 0
     hoved_ansatte = hoved_firma.get("antallAnsatte") or 0
@@ -720,14 +739,24 @@ def utfor_analyse(orgnr):
         st.session_state.forrige_sok = orgnr
         firmanavn = hoved.get("navn", "Ukjent")
 
-        registrert_nettside = verifiser_nettside(hoved.get("hjemmeside", ""))
+        registrert_hjemmeside = hoved.get("hjemmeside", "")
+        registrert_nettside = verifiser_nettside(registrert_hjemmeside)
         if registrert_nettside:
             hoved["hjemmeside"] = registrert_nettside
+            hoved["nettside_status"] = "confirmed"
             st.session_state.nettside_kilde = "Brreg"
         else:
             funnet_nettside = finn_nettside_for_firma(firmanavn)
             hoved["hjemmeside"] = funnet_nettside
-            st.session_state.nettside_kilde = "Automatisk funnet" if funnet_nettside else "Ikke funnet"
+            if funnet_nettside:
+                hoved["nettside_status"] = "inferred"
+                st.session_state.nettside_kilde = "Automatisk funnet"
+            elif registrert_hjemmeside:
+                hoved["nettside_status"] = "invalid"
+                st.session_state.nettside_kilde = "Ugyldig"
+            else:
+                hoved["nettside_status"] = "missing"
+                st.session_state.nettside_kilde = "Ikke funnet"
 
         st.session_state.hoved_nettside_validering = hent_validering_fra_cache(hoved.get("hjemmeside", ""))
 
@@ -768,6 +797,14 @@ def utfor_analyse(orgnr):
                         leads.append(e)
 
             st.session_state.mine_leads = leads
+            for lead in st.session_state.mine_leads:
+                nettside = lead.get("hjemmeside") or ""
+                if not nettside:
+                    lead["nettside_status"] = "missing"
+                elif normaliser_nettside_url(nettside):
+                    lead["nettside_status"] = "inferred"
+                else:
+                    lead["nettside_status"] = "invalid"
     else:
         st.error("Ugyldig organisasjonsnummer.")
 
