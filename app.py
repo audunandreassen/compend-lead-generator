@@ -16,6 +16,14 @@ zapier_mottaker = "https://hooks.zapier.com/hooks/catch/20188911/uejstea/"
 klient = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 modell_navn = "gpt-4o-mini"
 
+NETTSIDE_KILDE_ETIKETTER = {
+    "brreg": "Brreg",
+    "fallback": "Automatisk funnet",
+    "invalid": "Ugyldig",
+    "missing": "Ikke funnet",
+    "unknown": "Ukjent",
+}
+
 # --- DESIGN OG STYLING ---
 def bruk_stil():
     st.markdown("""
@@ -507,7 +515,11 @@ def finn_nettside_fallback(firma, orgnr, poststed):
         "wikipedia.org", "gulesider.no", "1881.no", "brreg.no", "enhetsregisteret.no",
     }
 
-    firmanavn_ord = [ord for ord in firma.lower().replace("-", " ").split() if len(ord) > 2]
+    stopord = {"as", "asa", "da", "ans", "entreprenør", "entreprenor", "holding", "group", "norge"}
+    firmanavn_ord = [
+        ord for ord in firma.lower().replace("-", " ").split()
+        if len(ord) > 2 and ord not in stopord
+    ]
     poststed_lav = (poststed or "").lower()
     orgnr_tekst = str(orgnr or "")
 
@@ -544,13 +556,34 @@ def finn_nettside_fallback(firma, orgnr, poststed):
         if any(ord in snippet for ord in firmanavn_ord):
             score += 1
 
+        # Krev minimum relevans slik at tilfeldige, men aktive domener filtreres bort.
+        har_domene_treff = any(ord in domene for ord in firmanavn_ord)
+        har_snippet_treff = any(ord in snippet for ord in firmanavn_ord)
+        if not har_domene_treff and not (har_snippet_treff and orgnr_tekst and orgnr_tekst in snippet):
+            continue
+
         kandidater.append((score, domene))
 
-    for _, domene in sorted(kandidater, key=lambda x: x[0], reverse=True):
+    for score, domene in sorted(kandidater, key=lambda x: x[0], reverse=True):
+        if score < 2:
+            continue
         verifisert = verifiser_nettside(domene)
         if verifisert:
             return verifisert
     return ""
+
+def normaliser_nettside_kilde(kilde):
+    verdi = (kilde or "").strip().lower()
+    mapping = {
+        "brreg": "brreg",
+        "fallback": "fallback",
+        "automatisk funnet": "fallback",
+        "invalid": "invalid",
+        "ugyldig": "invalid",
+        "missing": "missing",
+        "ikke funnet": "missing",
+    }
+    return mapping.get(verdi, "unknown")
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
     prompt = f"""
@@ -586,6 +619,7 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
 def finn_eposter(domene=None, nettside_kilde=None):
     domene = domene if domene is not None else st.session_state.get("nettside_url", "")
     nettside_kilde = nettside_kilde if nettside_kilde is not None else st.session_state.get("nettside_kilde", "")
+    nettside_kilde = normaliser_nettside_kilde(nettside_kilde)
     if not domene:
         return []
 
@@ -883,7 +917,7 @@ def utfor_analyse(orgnr):
         if registrert_nettside:
             hoved["hjemmeside"] = registrert_nettside
             hoved["nettside_status"] = "confirmed"
-            st.session_state.nettside_kilde = "Brreg"
+            st.session_state.nettside_kilde = "brreg"
         else:
             funnet_nettside = finn_nettside_fallback(
                 firmanavn,
@@ -893,13 +927,13 @@ def utfor_analyse(orgnr):
             hoved["hjemmeside"] = funnet_nettside
             if funnet_nettside:
                 hoved["nettside_status"] = "inferred"
-                st.session_state.nettside_kilde = "Automatisk funnet"
+                st.session_state.nettside_kilde = "fallback"
             elif registrert_hjemmeside:
                 hoved["nettside_status"] = "invalid"
-                st.session_state.nettside_kilde = "Ugyldig"
+                st.session_state.nettside_kilde = "invalid"
             else:
                 hoved["nettside_status"] = "missing"
-                st.session_state.nettside_kilde = "Ikke funnet"
+                st.session_state.nettside_kilde = "missing"
 
         st.session_state.hoved_nettside_validering = hent_validering_fra_cache(hoved.get("hjemmeside", ""))
 
@@ -1009,10 +1043,15 @@ if st.session_state.hoved_firma:
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
     nettside_kilde = st.session_state.get("nettside_kilde", "")
+    nettside_kilde_normalisert = normaliser_nettside_kilde(nettside_kilde)
+    nettside_kilde_etikett = NETTSIDE_KILDE_ETIKETTER.get(
+        nettside_kilde_normalisert,
+        NETTSIDE_KILDE_ETIKETTER["unknown"],
+    )
     nettside = st.session_state.get("nettside_url") or f.get("hjemmeside", "")
     nettside_visning = lag_url_lenke(nettside) if nettside else "Ikke oppgitt"
-    if nettside and nettside_kilde == "fallback":
-        nettside_visning = f"{lag_url_lenke(nettside)} (fallback)"
+    if nettside and nettside_kilde_normalisert == "fallback":
+        nettside_visning = f"{lag_url_lenke(nettside)} ({nettside_kilde_etikett})"
 
     hoved_validering = st.session_state.get("hoved_nettside_validering") or hent_validering_fra_cache(nettside)
     valideringsstatus = valideringsstatus_tekst(hoved_validering.get("status"))
