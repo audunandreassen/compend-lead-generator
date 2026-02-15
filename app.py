@@ -250,7 +250,7 @@ if st.session_state.hoved_firma:
     
     c1, c2, c3 = st.columns([2, 2, 1])
     with c1:
-        st.write(f"**Organisasjonsnummer:** {f['organisasjonsnummer']}")
+        st.write(f"**Organisasjonsnummer:** {f.get('organisasjonsnummer', 'Ukjent')}")
         st.write(f"**Ansatte:** {f.get('antallAnsatte', 'Ukjent')}")
         st.write(f"**Bransje:** {f.get('naeringskode1', {}).get('beskrivelse', 'Ukjent')}")
     with c2:
