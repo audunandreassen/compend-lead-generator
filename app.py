@@ -496,6 +496,60 @@ def finn_nettside_for_firma(firmanavn):
             return verifisert
     return ""
 
+def finn_nettside_fallback(firma, orgnr, poststed):
+    if not firma:
+        return ""
+
+    blokkerte_domener = {
+        "facebook.com", "instagram.com", "linkedin.com", "proff.no", "purehelp.no",
+        "wikipedia.org", "gulesider.no", "1881.no", "brreg.no", "enhetsregisteret.no",
+    }
+
+    firmanavn_ord = [ord for ord in firma.lower().replace("-", " ").split() if len(ord) > 2]
+    poststed_lav = (poststed or "").lower()
+    orgnr_tekst = str(orgnr or "")
+
+    try:
+        resultater = DDGS().text(f"{firma} orgnr {orgnr} offisiell nettside", max_results=12)
+    except:
+        return ""
+
+    kandidater = []
+    for resultat in resultater or []:
+        href = resultat.get("href", "")
+        domene = normaliser_nettside_url(href)
+        if not domene:
+            continue
+        if any(domene == blokkert or domene.endswith(f".{blokkert}") for blokkert in blokkerte_domener):
+            continue
+
+        snippet = f"{resultat.get('title', '')} {resultat.get('body', '')}".lower()
+        score = 0
+
+        # Heuristikk: firmanavn i domene
+        if any(ord in domene for ord in firmanavn_ord):
+            score += 3
+
+        # Heuristikk: norsk TLD
+        if domene.endswith(".no"):
+            score += 2
+
+        # Heuristikk: samsvar i snippets
+        if orgnr_tekst and orgnr_tekst in snippet:
+            score += 3
+        if poststed_lav and poststed_lav in snippet:
+            score += 1
+        if any(ord in snippet for ord in firmanavn_ord):
+            score += 1
+
+        kandidater.append((score, domene))
+
+    for _, domene in sorted(kandidater, key=lambda x: x[0], reverse=True):
+        verifisert = verifiser_nettside(domene)
+        if verifisert:
+            return verifisert
+    return ""
+
 def lag_isbryter(firmanavn, nyhetstekst, bransje):
     prompt = f"""
     Du er en salgsstrateg for Compend (www.compend.no). 
@@ -527,9 +581,16 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje):
     except:
         return "Kunne ikke generere analyse."
 
-def finn_eposter(domene):
+def finn_eposter(domene=None, nettside_kilde=None):
+    domene = domene if domene is not None else st.session_state.get("nettside_url", "")
+    nettside_kilde = nettside_kilde if nettside_kilde is not None else st.session_state.get("nettside_kilde", "")
     if not domene:
         return []
+
+    # Utnytt kun kilder vi eksplisitt stoler på.
+    if nettside_kilde not in {"brreg", "fallback"}:
+        return []
+
     rent_domene = (
         domene.replace("https://", "")
         .replace("http://", "")
@@ -746,7 +807,11 @@ def utfor_analyse(orgnr):
             hoved["nettside_status"] = "confirmed"
             st.session_state.nettside_kilde = "Brreg"
         else:
-            funnet_nettside = finn_nettside_for_firma(firmanavn)
+            funnet_nettside = finn_nettside_fallback(
+                firmanavn,
+                orgnr,
+                hoved.get("forretningsadresse", {}).get("poststed", ""),
+            )
             hoved["hjemmeside"] = funnet_nettside
             if funnet_nettside:
                 hoved["nettside_status"] = "inferred"
@@ -766,7 +831,7 @@ def utfor_analyse(orgnr):
             nyheter,
             hoved.get("naeringskode1", {}).get("beskrivelse", "Ukjent"),
         )
-        st.session_state.eposter = finn_eposter(hoved.get("hjemmeside"))
+        st.session_state.eposter = finn_eposter(st.session_state.nettside_url, st.session_state.nettside_kilde)
         
         kode = hoved.get("naeringskode1", {}).get("kode")
         if kode:
@@ -865,10 +930,10 @@ if st.session_state.hoved_firma:
     eposter = st.session_state.get("eposter", [])
     epost_html = f'<div class="detalj"><strong>E-post</strong> {", ".join(eposter)}</div>' if eposter else ""
     nettside_kilde = st.session_state.get("nettside_kilde", "")
-    nettside = f.get("hjemmeside", "")
+    nettside = st.session_state.get("nettside_url") or f.get("hjemmeside", "")
     nettside_visning = nettside if nettside else "Ikke oppgitt"
-    if nettside and nettside_kilde == "Automatisk funnet":
-        nettside_visning = f"{nettside} (automatisk funnet)"
+    if nettside and nettside_kilde == "fallback":
+        nettside_visning = f"{nettside} (fallback)"
 
     hoved_validering = st.session_state.get("hoved_nettside_validering") or hent_validering_fra_cache(nettside)
     valideringsstatus = valideringsstatus_tekst(hoved_validering.get("status"))
