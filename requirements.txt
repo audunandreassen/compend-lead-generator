@@ -1,4 +1,5 @@
 streamlit
+streamlit-searchbox
 requests
 openai
 duckduckgo_search
