@@ -1635,6 +1635,8 @@ if st.session_state.hoved_firma:
                         st.rerun()
 
 # --- SCROLL TIL TOPPEN (plassert etter alt innhold er rendret) ---
+st.write(f"DEBUG scroll_topp = {st.session_state.scroll_topp}, auto_analyse = {st.session_state.auto_analyse_orgnr}")
 if st.session_state.scroll_topp:
+    st.write("DEBUG: scroll_til_toppen() KALLES NÅ")
     st.session_state.scroll_topp = False
     scroll_til_toppen()
