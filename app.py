@@ -86,16 +86,16 @@ def tell_kontaktpunkter(kontaktinfo, eposter=None):
 def hent_datakvalitet_label(score):
     if score >= 75:
         return {
-            "tekst": "god datakvalitet",
+            "tekst": "God datakvalitet",
             "css_klasse": "datakvalitet-label datakvalitet-label--god",
         }
     if score >= 50:
         return {
-            "tekst": "ok datakvalitet",
+            "tekst": "OK datakvalitet",
             "css_klasse": "datakvalitet-label datakvalitet-label--ok",
         }
     return {
-        "tekst": "lav datakvalitet",
+        "tekst": "Dårlig datakvalitet",
         "css_klasse": "datakvalitet-label datakvalitet-label--lav",
     }
 
@@ -1589,7 +1589,7 @@ if st.session_state.hoved_firma:
         with col_h_pf:
             st.markdown(f"""
             <div class="score-kort">
-                <div class="score-title">Passformscore (hovedselskap)</div>
+                <div class="score-title">Match</div>
                 <div class="score-value">{hovedscore['passformscore']}/100</div>
                 <ul>
                     <li>{hovedscore['passform_grunner'][0]}</li>
@@ -1603,7 +1603,7 @@ if st.session_state.hoved_firma:
         with col_h_int:
             st.markdown(f"""
             <div class="score-kort">
-                <div class="score-title">Intentscore (hovedselskap)</div>
+                <div class="score-title">Temperatur</div>
                 <div class="score-value">{hovedscore['intentscore']}/100</div>
                 <ul>
                     <li>{hovedscore['intent_grunner'][0]}</li>
@@ -1647,7 +1647,7 @@ if st.session_state.hoved_firma:
                 st.success("Overfort til HubSpot")
     
     if st.session_state.mine_leads:
-        st.markdown('<div class="seksjon-header">Andre aktorer i bransjen</div>', unsafe_allow_html=True)
+        st.markdown('<div class="seksjon-header">Lignende aktører</div>', unsafe_allow_html=True)
 
         for i, lead in enumerate(st.session_state.mine_leads):
             poststed = lead.get('forretningsadresse', {}).get('poststed', 'Ukjent')
@@ -1676,7 +1676,7 @@ if st.session_state.hoved_firma:
                 with col_pf:
                     st.markdown(f"""
                     <div class="score-kort">
-                        <div class="score-title">Passformscore</div>
+                        <div class="score-title">Match</div>
                         <div class="score-value">{scoredata['passformscore']}/100</div>
                         <ul>
                             <li>{scoredata['passform_grunner'][0]}</li>
@@ -1688,7 +1688,7 @@ if st.session_state.hoved_firma:
                 with col_int:
                     st.markdown(f"""
                     <div class="score-kort">
-                        <div class="score-title">Intentscore</div>
+                        <div class="score-title">Temperatur</div>
                         <div class="score-value">{scoredata['intentscore']}/100</div>
                         <ul>
                             <li>{scoredata['intent_grunner'][0]}</li>
