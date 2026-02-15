@@ -1232,10 +1232,9 @@ def scroll_til_toppen():
     # Bruker MutationObserver for å vente til Streamlit er ferdig med å rendre,
     # og deretter scroller. Unik nonce hver gang for å unngå Streamlit-caching.
     import time
-    nonce = int(time.time() * 1000)
+    nonce = str(int(time.time() * 1000))
     components.html(
-        f"""
-        <!-- nonce={nonce} -->
+        "<!-- nonce=" + nonce + """ -->
         <script>
         (function() {
             var doc;
