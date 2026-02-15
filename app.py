@@ -964,6 +964,31 @@ def lag_isbryter(firmanavn, nyhetstekst, bransje, bht_plikt):
     3. Hvis {bht_plikt}=Ja, skal du tydelig forklare hvorfor dette øker behovet for systematisk og dokumenterbar opplæring og hvordan det henger sammen med BHT rollen og arbeidsmiljøarbeidet.
     4. Hvis {bht_plikt}=Nei eller Ukjent, skal du likevel formulere en sterk HMS eller compliance begrunnelse med målbar forretningsverdi.
     5. Svar på norsk. Ingen hilsener, ingen emojier. Skriv konkret og uten floskler.
+    6. Følg ALLTID denne malen:
+    
+    Salgsorientert analyse for HAMAR BYGG AS
+    Bransje: Oppføring av bygninger
+    BHT-plikt: Ja
+    
+    Prioritering og posisjonering
+    HAMAR BYGG AS opererer i en bransje med strenge krav til helse, miljø og sikkerhet (HMS) utviklet for å ivareta arbeidstakernes sikkerhet og trivsel. Som et selskap med BHT-plikt, har de et særskilt ansvar for å implementere systematisk opplæring og dokumentasjon av HMS-arbeidet. Dette øker behovet for en strukturert opplæringsplan, som kan hjelpe dem med både å oppfylle lovpålagte krav og forbedre arbeidsmiljøet.
+    
+    Hvorfor nå?
+    Det er flere grunner til at det nå er et utmerket tidspunkt å kontakte HAMAR BYGG AS:
+    
+    1. Økt fokus på HMS: Etter pandemien er det økt bevissthet rundt HMS-rutiner, og bedrifter oppfordres til å øke faglig kompetanse for å redusere risiko for ulykker og helseproblemer. HAMAR BYGG AS kan dra nytte av et robust opplæringssystem for å styrke sine HMS-rutiner.
+    2. Regulatoriske endringer: Bransjen er underlagt stadig utvikling av regelverk knyttet til HMS og sikkerhet. Å ha en oppdatert LMS som kan tilpasse seg endringer i lovgivning og regulering er derfor avgjørende for selskapets evne til å tilpasse seg og oppfylle krav.
+    3. Konkurransefortrinn: Ved å investere i systematisk opplæring kan HAMAR BYGG AS posisjonere seg som en tryggere og mer attraktiv arbeidsplass, hvilket kan tiltrekke seg nøkkelkompetanse i en konkurranseutsatt bransje.
+
+    HMS og etterlevelsesvinkel
+    Siden HAMAR BYGG AS har BHT-plikt, er det viktig at opplæring i HMS ikke bare er en formalitet, men en integrert del av selskapets drift. Systematisk og dokumenterbar opplæring bidrar til:
+    Reduksjon av arbeidsrelaterte skader: Effektiv opplæring i HMS vil redusere antall ulykker, som igjen kan føre til lavere sykefravær og lavere kostnader til skadebehandling.
+    Bedre rapportering og oppfølging: Med god opplæring og bruk av LMS kan selskapet dokumentere kursdeltakelse og -effekt på en effektiv måte, noe som er sentralt i forhold til BHT-rapporter.
+    Forbedret bedriftskultur: En sterk HMS-kultur kan bidra til økt trivsel blant ansatte og et bedre arbeidsmiljø, noe som igjen påvirker produktiviteten positivt.
+    
+    Kobling til Compends kursbibliotek og LMS
+    Compend tilbyr et omfattende kursbibliotek som dekker alle aspekter av HMS- og sikkerhetsopplæring spesifikt tilpasset byggebransjen. Med vårt LMS kan HAMAR BYGG AS enkelt administrere, rapportere og dokumentere opplæringen av ansatte, noe som er essensielt for å oppfylle BHT-plikt og styrke selskapets HMS-arbeid. Vår plattform gir også mulighet for fleksibel læring, der ansatte kan ta kurs når det passer dem, hvilket kan være en fordel for en bransje med varierende arbeidstider.
+    Ved å velge Compend kan HAMAR BYGG AS sikre både compliance, bedre HMS-praksis og en mer kompetent arbeidstakergruppe. Ta kontakt med dem for å diskutere hvordan vi kan hjelpe dem med å møte sine opplæringsbehov.
     """
     try:
         svar = klient.chat.completions.create(
