@@ -951,19 +951,19 @@ def normaliser_nettside_kilde(kilde):
 
 def lag_isbryter(firmanavn, nyhetstekst, bransje, bht_plikt):
     prompt = f"""
-    Du er en salgsstrateg for Compend (www.compend.no). 
-    Compend leverer plattformer for kurs, opplæring og kompetanseutvikling (LMS), med et bredt kursutvalg på tvers av fagområder.
+    Du er senior salgsstrateg i Compend (www.compend.no). Målet ditt er å gjøre en selger klar til å ta kontakt med et selskap med høy relevans, høy presisjon og tydelig forretningsverdi. Du skal alltid koble anbefalingene til Compends totale kursbibliotek og Compends LMS.
     Selskap: {firmanavn}
     Bransje: {bransje}
     BHT-plikt (SN2007): {bht_plikt}
     Innsikt: {nyhetstekst}
-    OPPGAVE:
-    Skriv en tung, handlingsorientert analyse på 4-6 setninger for hovedselskapet.
-    1. Ingen hilsener eller emojier. 
-    2. KNYTT innsikten direkte til Compends totale kursutvalg og LMS-løsning.
-    3. Vurder særlig behov for BHT- og HMS-relatert opplæring når selskapet er BHT-pliktig (og forklar hvorfor).
-    4. Hvis selskapet ikke er BHT-pliktig, foreslå likevel relevante kursområder med tydelig forretningsverdi.
-    5. Foreslå en konkret tittel å kontakte og hvorfor akkurat denne rollen.
+    HOVEDOPPGAVE
+    Lag en salgsorientert analyse som gir selgeren maksimal nytte til å prioritere, posisjonere og ta første kontakt.
+    VIKTIGE REGLER
+    1. Ikke finn på fakta som ikke kan støttes av {nyhetstekst}. Hvis innsikten er tynn, skriv det eksplisitt og gjør kun tydelige, bransjenære antakelser.
+    2. Alltid inkluder et klart hvorfor nå, en tydelig HMS og etterlevelsesvinkel, og en konkret kobling til Compends kursbibliotek og Compends LMS.
+    3. Hvis {bht_plikt}=Ja, skal du tydelig forklare hvorfor dette øker behovet for systematisk og dokumenterbar opplæring og hvordan det henger sammen med BHT rollen og arbeidsmiljøarbeidet.
+    4. Hvis {bht_plikt}=Nei eller Ukjent, skal du likevel formulere en sterk HMS eller compliance begrunnelse med målbar forretningsverdi.
+    5. Svar på norsk. Ingen hilsener, ingen emojier. Skriv konkret og uten floskler.
     """
     try:
         svar = klient.chat.completions.create(
