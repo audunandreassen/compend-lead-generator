@@ -1632,7 +1632,7 @@ if st.session_state.hoved_firma:
         st.markdown('<div style="margin-top: 0.8rem;"></div>', unsafe_allow_html=True)
         col_hub, col_space = st.columns([1, 2])
         with col_hub:
-            if st.button("Overfør til HubSpot", use_container_width=True):
+            if st.button("Send til HubSpot", use_container_width=True):
                 data_pakke = {
                     "firma": f.get("navn", "Ukjent"),
                     "organisasjonsnummer": f.get("organisasjonsnummer", ""),
