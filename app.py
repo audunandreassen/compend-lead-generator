@@ -57,6 +57,30 @@ def bruk_stil():
             transform: translateY(0);
         }
 
+        /* --- Søkeresultater (dropdown-stil) --- */
+        .sok-resultater + div .stButton>button,
+        .sok-resultater ~ div .stButton>button {
+            background-color: #ffffff;
+            color: #003642;
+            border: 1px solid #e0e7ec;
+            border-radius: 6px;
+            text-align: left;
+            font-size: 0.82rem;
+            font-weight: 400;
+            padding: 8px 14px;
+            margin-bottom: -4px;
+            box-shadow: none;
+        }
+
+        .sok-resultater + div .stButton>button:hover,
+        .sok-resultater ~ div .stButton>button:hover {
+            background-color: #eef6f4;
+            border-color: #368373;
+            color: #003642;
+            transform: none;
+            box-shadow: none;
+        }
+
         /* --- Input-felt --- */
         .stTextInput>div>div>input {
             background-color: #FFFFFF !important;
@@ -280,6 +304,8 @@ if "soke_felt" not in st.session_state:
     st.session_state.soke_felt = ""
 if "forrige_sok" not in st.session_state:
     st.session_state.forrige_sok = ""
+if "navnetreff" not in st.session_state:
+    st.session_state.navnetreff = []
 
 # Hjelpefunksjoner
 def hent_firma_data(orgnr):
@@ -288,6 +314,15 @@ def hent_firma_data(orgnr):
         return svar.json() if svar.status_code == 200 else None
     except:
         return None
+
+def sok_firma_navn(navn):
+    try:
+        svar = requests.get(brreg_adresse, params={"navn": navn, "size": 8}, timeout=5)
+        if svar.status_code == 200:
+            return svar.json().get("_embedded", {}).get("enheter", [])
+    except:
+        pass
+    return []
 
 def finn_nyheter(firmanavn):
     try:
@@ -409,24 +444,39 @@ def utfor_analyse(orgnr):
 col_l, col_m, col_r = st.columns([1, 3, 1])
 with col_m:
     org_input = st.text_input(
-        "Søk på organisasjonsnummer",
+        "Søk på selskap",
         value=st.session_state.soke_felt,
         label_visibility="collapsed",
-        placeholder="Organisasjonsnummer (9 siffer)",
+        placeholder="Selskapsnavn eller organisasjonsnummer",
     )
-    start_knapp = st.button("Analyser selskap", use_container_width=True)
+
+er_orgnr = org_input.strip().isdigit() and len(org_input.strip()) == 9
 
 # Automatisk analyse ved direkte orgnr-innskriving
-if (org_input != st.session_state.forrige_sok and len(org_input) == 9):
+if er_orgnr and org_input != st.session_state.forrige_sok:
     with st.spinner("Analyserer selskap..."):
-        utfor_analyse(org_input)
+        utfor_analyse(org_input.strip())
     st.rerun()
 
-# Manuell analyse-knapp
-if start_knapp:
-    with st.spinner("Analyserer selskap..."):
-        utfor_analyse(org_input)
-    st.rerun()
+# Navnesøk – vis treff mens brukeren skriver
+if not er_orgnr and len(org_input.strip()) >= 2:
+    treff = sok_firma_navn(org_input.strip())
+    if treff:
+        col_l2, col_m2, col_r2 = st.columns([1, 3, 1])
+        with col_m2:
+            with st.container():
+                st.markdown('<div class="sok-resultater">', unsafe_allow_html=True)
+                for t in treff:
+                    poststed = t.get("forretningsadresse", {}).get("poststed", "")
+                    ansatte = t.get("antallAnsatte", 0)
+                    orgnr = t.get("organisasjonsnummer", "")
+                    label = f"{t['navn']}  ·  {poststed}  ·  {ansatte} ansatte  ·  {orgnr}"
+                    if st.button(label, key=f"treff_{orgnr}", use_container_width=True):
+                        st.session_state.soke_felt = orgnr
+                        with st.spinner("Analyserer selskap..."):
+                            utfor_analyse(orgnr)
+                        st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
 
 # --- VISNING ---
 if st.session_state.hoved_firma:
