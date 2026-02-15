@@ -284,22 +284,25 @@ if st.session_state.get("scroll_to_top", False):
     st.components.v1.html(
         """
         <script>
-        const doc = window.parent.document;
-        // Prøv ulike Streamlit-selektorer for scroll-container
-        const selectors = [
-            'section.main',
-            '[data-testid="stAppViewContainer"]',
-            '.main',
-            '.block-container',
-        ];
-        for (const sel of selectors) {
-            const el = doc.querySelector(sel);
-            if (el) {
-                el.scrollTop = 0;
-            }
+        function tryScroll() {
+            try {
+                var w = window;
+                while (w !== w.parent) {
+                    try {
+                        w = w.parent;
+                        w.scrollTo(0, 0);
+                        var els = w.document.querySelectorAll(
+                            'section.main, [data-testid="stAppViewContainer"], ' +
+                            '[data-testid="ScrollToBottomContainer"], .main, .stApp'
+                        );
+                        els.forEach(function(el) { el.scrollTop = 0; });
+                    } catch(e) { break; }
+                }
+            } catch(e) {}
         }
-        // Fallback: scroll hele vinduet
-        window.parent.scrollTo(0, 0);
+        tryScroll();
+        setTimeout(tryScroll, 150);
+        setTimeout(tryScroll, 500);
         </script>
         """,
         height=0,
