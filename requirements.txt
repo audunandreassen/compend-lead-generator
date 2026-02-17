@@ -1,6 +1,6 @@
 streamlit
+streamlit-searchbox
 requests
-openai
-duckduckgo_search
 pandas
-xlsxwriter
+duckduckgo_search
+openai
